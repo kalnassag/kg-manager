@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Graph Visualization - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="graph-page">
+    <!-- Toolbar -->
+    <div class="graph-toolbar">
+        <div class="graph-toolbar-left">
+            <h1 class="graph-title">Knowledge Graph Visualization</h1>
+        </div>
+        <div class="graph-toolbar-right">
+            <div class="graph-controls">
+                <!-- Search -->
+                <input type="text" id="graph-search" placeholder="Search entities..." class="graph-search-input">
+                <button id="search-btn" class="btn btn-secondary btn-small">Search</button>
+
+                <!-- Filter by type -->
+                <select id="filter-type" class="graph-select">
+                    <option value="">All Types</option>
+                    {% for label in schema.labels %}
+                    <option value="{{ label }}">{{ humanize_label(label) }}</option>
+                    {% endfor %}
+                </select>
+
+                <!-- Layout options -->
+                <select id="layout-select" class="graph-select">
+                    <option value="cose">Force Directed</option>
+                    <option value="circle">Circle</option>
+                    <option value="grid">Grid</option>
+                    <option value="concentric">Concentric</option>
+                    <option value="breadthfirst">Hierarchy</option>
+                </select>
+
+                <!-- Actions -->
+                <button id="load-sample-btn" class="btn btn-primary btn-small">Load Sample</button>
+                <button id="fit-btn" class="btn btn-secondary btn-small">Fit to Screen</button>
+                <button id="clear-btn" class="btn btn-secondary btn-small">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graph Container -->
+    <div id="cy-container"></div>
+
+    <!-- Info Panel -->
+    <div id="info-panel" class="info-panel" style="display: none;">
+        <div class="info-panel-header">
+            <h3 id="info-title">Node Details</h3>
+            <button id="close-info" class="close-btn">&times;</button>
+        </div>
+        <div class="info-panel-body">
+            <div id="info-content"></div>
+            <div class="info-panel-actions">
+                <button id="expand-node-btn" class="btn btn-primary btn-small">Expand Connections</button>
+                <button id="view-details-btn" class="btn btn-secondary btn-small">View Full Details</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="graph-legend">
+        <h4>Legend</h4>
+        <div class="legend-items">
+            {% for label in schema.product_types %}
+            <div class="legend-item">
+                <div class="legend-color legend-product"></div>
+                <span>{{ humanize_label(label) }}</span>
+            </div>
+            {% endfor %}
+            <div class="legend-item">
+                <div class="legend-color legend-supporting"></div>
+                <span>Supporting Entities</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Load Cytoscape.js -->
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="/static/js/graph.js"></script>
+{% endblock %}

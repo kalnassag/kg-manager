@@ -322,6 +322,196 @@ async def get_schema():
     discovery = get_discovery()
     return discovery.get_all_schema_info()
 
+# Graph Visualization Routes
+
+@app.get("/graph", response_class=HTMLResponse)
+async def graph_view(request: Request):
+    """Graph visualization page."""
+    discovery = get_discovery()
+    schema = discovery.get_all_schema_info()
+
+    return templates.TemplateResponse("graph.html", {
+        "request": request,
+        "schema": schema
+    })
+
+@app.get("/api/graph/explore")
+async def explore_graph(
+    label: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    depth: int = 1,
+    limit: int = 50
+):
+    """
+    Get graph data for visualization.
+
+    If label and entity_id provided: Start from that entity and expand
+    Otherwise: Get a sample of the graph
+    """
+    from .db.connection import get_connection
+    conn = get_connection()
+
+    nodes = []
+    edges = []
+
+    if label and entity_id:
+        # Start from specific entity
+        # Try to find the node with flexible ID
+        id_properties = ['_id', 'id', 'name', 'model', 'code']
+        node_found = False
+
+        for id_prop in id_properties:
+            query = f"""
+            MATCH path = (start:{label} {{{id_prop}: $entity_id}})-[r*1..{depth}]-(connected)
+            WITH start, r, connected
+            LIMIT $limit
+            RETURN start, r, connected
+            """
+            try:
+                results = conn.execute_query(query, {
+                    'entity_id': entity_id,
+                    'limit': limit
+                })
+                if results:
+                    node_found = True
+                    break
+            except:
+                continue
+
+        if not node_found:
+            # Fallback: try any property match
+            query = f"""
+            MATCH path = (start:{label})-[r*1..{depth}]-(connected)
+            WHERE any(prop IN keys(start) WHERE toString(start[prop]) = $entity_id)
+            WITH start, r, connected
+            LIMIT $limit
+            RETURN start, r, connected
+            """
+            results = conn.execute_query(query, {
+                'entity_id': entity_id,
+                'limit': limit
+            })
+
+        # Process results
+        seen_nodes = set()
+        seen_edges = set()
+
+        for record in results:
+            # Add start node
+            start_node = dict(record['start'])
+            start_labels = list(record['start'].labels)
+            node_id = get_entity_id(start_node)[1]
+
+            if node_id not in seen_nodes:
+                nodes.append({
+                    'id': node_id,
+                    'label': get_display_name(start_node, start_labels[0] if start_labels else ''),
+                    'type': start_labels[0] if start_labels else 'Unknown',
+                    'properties': start_node
+                })
+                seen_nodes.add(node_id)
+
+            # Add connected node
+            connected_node = dict(record['connected'])
+            connected_labels = list(record['connected'].labels)
+            connected_id = get_entity_id(connected_node)[1]
+
+            if connected_id not in seen_nodes:
+                nodes.append({
+                    'id': connected_id,
+                    'label': get_display_name(connected_node, connected_labels[0] if connected_labels else ''),
+                    'type': connected_labels[0] if connected_labels else 'Unknown',
+                    'properties': connected_node
+                })
+                seen_nodes.add(connected_id)
+
+            # Add relationships
+            if record['r']:
+                for rel_path in record['r']:
+                    rel_list = rel_path if isinstance(rel_path, list) else [rel_path]
+                    for rel in rel_list:
+                        edge_id = f"{node_id}-{rel.type}-{connected_id}"
+                        if edge_id not in seen_edges:
+                            edges.append({
+                                'id': edge_id,
+                                'source': node_id,
+                                'target': connected_id,
+                                'label': rel.type,
+                                'type': rel.type
+                            })
+                            seen_edges.add(edge_id)
+
+    else:
+        # Get a sample of the graph
+        query = """
+        MATCH (n)
+        WITH n, rand() as r
+        ORDER BY r
+        LIMIT $limit
+        OPTIONAL MATCH (n)-[rel]-(m)
+        RETURN n, collect(distinct {rel: rel, m: m}) as connections
+        """
+        results = conn.execute_query(query, {'limit': limit})
+
+        seen_nodes = set()
+        seen_edges = set()
+
+        for record in results:
+            # Add node
+            node = dict(record['n'])
+            node_labels = list(record['n'].labels)
+            node_id = get_entity_id(node)[1]
+
+            if node_id not in seen_nodes:
+                nodes.append({
+                    'id': node_id,
+                    'label': get_display_name(node, node_labels[0] if node_labels else ''),
+                    'type': node_labels[0] if node_labels else 'Unknown',
+                    'properties': node
+                })
+                seen_nodes.add(node_id)
+
+            # Add connections
+            for conn_data in record['connections']:
+                if conn_data['rel'] and conn_data['m']:
+                    rel = conn_data['rel']
+                    m = conn_data['m']
+
+                    m_dict = dict(m)
+                    m_labels = list(m.labels)
+                    m_id = get_entity_id(m_dict)[1]
+
+                    if m_id not in seen_nodes:
+                        nodes.append({
+                            'id': m_id,
+                            'label': get_display_name(m_dict, m_labels[0] if m_labels else ''),
+                            'type': m_labels[0] if m_labels else 'Unknown',
+                            'properties': m_dict
+                        })
+                        seen_nodes.add(m_id)
+
+                    # Add edge
+                    edge_id = f"{node_id}-{rel.type}-{m_id}"
+                    if edge_id not in seen_edges:
+                        edges.append({
+                            'id': edge_id,
+                            'source': node_id,
+                            'target': m_id,
+                            'label': rel.type,
+                            'type': rel.type
+                        })
+                        seen_edges.add(edge_id)
+
+    return {
+        'nodes': nodes,
+        'edges': edges
+    }
+
+@app.get("/api/graph/expand/{label}/{entity_id}")
+async def expand_node(label: str, entity_id: str, depth: int = 1):
+    """Expand a specific node to show its connections."""
+    return await explore_graph(label=label, entity_id=entity_id, depth=depth, limit=100)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
