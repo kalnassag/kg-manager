@@ -681,6 +681,57 @@ a:hover {
     font-style: italic;
 }
 
+/* Related Products (for supporting entities) */
+.related-products-section {
+    margin-bottom: 1.5rem;
+}
+
+.related-products-section:last-child {
+    margin-bottom: 0;
+}
+
+.related-products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.related-product-card {
+    background: var(--secondary-blue);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    color: var(--text-dark);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: block;
+    text-align: center;
+}
+
+.related-product-card:hover {
+    background: var(--primary-blue);
+    color: white;
+    border-color: var(--primary-blue);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.2);
+}
+
+.related-products-more {
+    background: var(--background);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    color: var(--text-medium);
+    font-size: 0.875rem;
+    font-style: italic;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* Forms */
 .entity-form {
     background: var(--white);

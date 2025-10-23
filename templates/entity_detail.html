@@ -77,6 +77,31 @@
                 {% endif %}
             </div>
             {% endfor %}
+
+            <!-- Related Products Section (for supporting entities) -->
+            {% if is_supporting_entity and related_by_type %}
+            <div class="property-group">
+                <h2 class="group-title">Related Products</h2>
+                {% for product_label, related_items in related_by_type.items() %}
+                <div class="related-products-section">
+                    <h3 class="subgroup-title">{{ humanize_label(product_label) }} ({{ related_items|length }})</h3>
+                    <div class="related-products-grid">
+                        {% for rel in related_items[:20] %}
+                        <a href="/entities/{{ rel.labels[0] }}/{{ rel.node._id }}"
+                           class="related-product-card">
+                            {{ get_display_name(rel.node, rel.labels[0]) }}
+                        </a>
+                        {% endfor %}
+                        {% if related_items|length > 20 %}
+                        <div class="related-products-more">
+                            + {{ related_items|length - 20 }} more
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
 
         <!-- Relationships Sidebar -->

@@ -122,37 +122,55 @@ async def list_entities(
         "sample_props": sorted(sample_props.keys())
     })
 
-@app.get("/entities/{label}/{entity_id}", response_class=HTMLResponse)
-async def view_entity(request: Request, label: str, entity_id: str):
-    """Detail view for a specific entity."""
-    queries = get_queries()
+@app.get("/entities/{label}/new", response_class=HTMLResponse)
+async def create_entity_form(request: Request, label: str):
+    """Create form for new entity."""
     discovery = get_discovery()
 
-    # Get entity
-    entity = queries.get_entity_by_id(label, entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
+    # Get sample properties from existing entities
+    sample_props = discovery.get_node_properties(label)
 
-    # Get relationships
-    relationships = discovery.get_entity_relationships(label, entity_id)
-
-    # Group properties
-    grouped_props = group_properties(entity)
-    sorted_props = sort_groups(grouped_props)
-
-    # Get display name with brand
-    display_name = get_display_name_with_brand(entity, relationships, label)
-
-    return templates.TemplateResponse("entity_detail.html", {
+    return templates.TemplateResponse("entity_create.html", {
         "request": request,
         "label": label,
         "label_human": humanize_label(label),
-        "entity": entity,
-        "entity_id": entity_id,
-        "display_name": display_name,
-        "grouped_properties": sorted_props,
-        "relationships": relationships
+        "sample_props": sorted(sample_props.keys())
     })
+
+@app.post("/entities/{label}/new")
+async def create_entity(request: Request, label: str):
+    """Create a new entity."""
+    queries = get_queries()
+
+    # Get form data
+    form_data = await request.form()
+    properties = {}
+
+    for key, value in form_data.items():
+        if not value or value == '':
+            continue
+
+        # Convert value
+        converted_value = convert_value(key, value)
+
+        # Validate
+        is_valid, error = validate_value(key, converted_value)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error)
+
+        properties[key] = converted_value
+
+    # Ensure _id is present
+    if '_id' not in properties:
+        raise HTTPException(status_code=400, detail="_id is required")
+
+    # Create entity
+    try:
+        queries.create_entity(label, properties)
+        return RedirectResponse(url=f"/entities/{label}", status_code=303)
+    except Exception as e:
+        logger.error(f"Failed to create entity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/entities/{label}/{entity_id}/edit", response_class=HTMLResponse)
 async def edit_entity_form(request: Request, label: str, entity_id: str):
@@ -217,55 +235,53 @@ async def update_entity(request: Request, label: str, entity_id: str):
         logger.error(f"Failed to update entity: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/entities/{label}/new", response_class=HTMLResponse)
-async def create_entity_form(request: Request, label: str):
-    """Create form for new entity."""
+@app.get("/entities/{label}/{entity_id}", response_class=HTMLResponse)
+async def view_entity(request: Request, label: str, entity_id: str):
+    """Detail view for a specific entity."""
+    queries = get_queries()
     discovery = get_discovery()
 
-    # Get sample properties from existing entities
-    sample_props = discovery.get_node_properties(label)
+    # Get entity
+    entity = queries.get_entity_by_id(label, entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
 
-    return templates.TemplateResponse("entity_create.html", {
+    # Get relationships
+    relationships = discovery.get_entity_relationships(label, entity_id)
+
+    # Group properties
+    grouped_props = group_properties(entity)
+    sorted_props = sort_groups(grouped_props)
+
+    # Get display name with brand
+    display_name = get_display_name_with_brand(entity, relationships, label)
+
+    # Check if this is a supporting entity (few properties)
+    # If so, get all related entities grouped by type
+    related_by_type = {}
+    is_supporting_entity = len(entity) <= 5  # Supporting entities typically have few properties
+
+    if is_supporting_entity and relationships:
+        # Group related entities by their label
+        for rel in relationships:
+            if rel['direction'] == 'incoming':  # Things that point to this entity
+                rel_label = rel['labels'][0]
+                if rel_label not in related_by_type:
+                    related_by_type[rel_label] = []
+                related_by_type[rel_label].append(rel)
+
+    return templates.TemplateResponse("entity_detail.html", {
         "request": request,
         "label": label,
         "label_human": humanize_label(label),
-        "sample_props": sorted(sample_props.keys())
+        "entity": entity,
+        "entity_id": entity_id,
+        "display_name": display_name,
+        "grouped_properties": sorted_props,
+        "relationships": relationships,
+        "related_by_type": related_by_type,
+        "is_supporting_entity": is_supporting_entity
     })
-
-@app.post("/entities/{label}/new")
-async def create_entity(request: Request, label: str):
-    """Create a new entity."""
-    queries = get_queries()
-
-    # Get form data
-    form_data = await request.form()
-    properties = {}
-
-    for key, value in form_data.items():
-        if not value or value == '':
-            continue
-
-        # Convert value
-        converted_value = convert_value(key, value)
-
-        # Validate
-        is_valid, error = validate_value(key, converted_value)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-
-        properties[key] = converted_value
-
-    # Ensure _id is present
-    if '_id' not in properties:
-        raise HTTPException(status_code=400, detail="_id is required")
-
-    # Create entity
-    try:
-        queries.create_entity(label, properties)
-        return RedirectResponse(url=f"/entities/{label}", status_code=303)
-    except Exception as e:
-        logger.error(f"Failed to create entity: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/entities/{label}/{entity_id}/delete")
 async def delete_entity(label: str, entity_id: str):
