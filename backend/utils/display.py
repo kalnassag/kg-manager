@@ -1,5 +1,37 @@
 """Utility functions for computing display names."""
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
+
+def get_entity_id(node: Dict) -> Tuple[str, str]:
+    """
+    Get the identifier property and value for an entity.
+
+    Returns: (property_name, property_value)
+
+    Priority:
+    1. _id
+    2. id
+    3. name
+    4. model
+    5. First non-internal property
+    """
+    if not node:
+        return ('_id', 'unknown')
+
+    # Try priority ID properties
+    priority_props = ['_id', 'id', 'name', 'model', 'code', 'key']
+    for prop in priority_props:
+        if prop in node and node[prop]:
+            return (prop, str(node[prop]))
+
+    # Try first non-internal property
+    for key, value in node.items():
+        if key.startswith('_'):
+            continue
+        if value:
+            return (key, str(value))
+
+    # Fallback
+    return ('_id', 'unknown')
 
 def get_display_name(node: Dict, label: str = "") -> str:
     """

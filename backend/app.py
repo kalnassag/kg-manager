@@ -14,6 +14,7 @@ from .db.queries import get_queries
 from .utils.display import (
     get_display_name,
     get_display_name_with_brand,
+    get_entity_id,
     humanize_label,
     humanize_property_name,
     humanize_relationship_type
@@ -39,6 +40,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Add utility functions to Jinja2 environment
 templates.env.globals.update({
     'get_display_name': get_display_name,
+    'get_entity_id': get_entity_id,
     'humanize_label': humanize_label,
     'humanize_property_name': humanize_property_name,
     'humanize_relationship_type': humanize_relationship_type,

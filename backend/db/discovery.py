@@ -114,34 +114,83 @@ class SchemaDiscovery:
         return relationships
 
     def get_entity_relationships(self, label: str, node_id: str) -> List[Dict]:
-        """Get all relationships for a specific node."""
-        # First, get the node
-        query = f"""
-        MATCH (n:{label} {{_id: $node_id}})
-        RETURN n
-        """
-        node_results = self.conn.execute_query(query, {'node_id': node_id})
-        if not node_results:
+        """Get all relationships for a specific node (tries multiple identifier properties)."""
+        # Try to find the node with different ID properties
+        id_properties = ['_id', 'id', 'name', 'model', 'code']
+        node_found = False
+        id_prop_used = '_id'
+
+        for id_prop in id_properties:
+            query = f"MATCH (n:{label} {{{id_prop}: $node_id}}) RETURN n"
+            try:
+                node_results = self.conn.execute_query(query, {'node_id': node_id})
+                if node_results:
+                    node_found = True
+                    id_prop_used = id_prop
+                    break
+            except:
+                continue
+
+        if not node_found:
+            # Try matching any property
+            query = f"""
+            MATCH (n:{label})
+            WHERE any(prop IN keys(n) WHERE toString(n[prop]) = $node_id)
+            RETURN n
+            LIMIT 1
+            """
+            try:
+                node_results = self.conn.execute_query(query, {'node_id': node_id})
+                if node_results:
+                    node_found = True
+                    # For this case, we'll use a dynamic match in relationship queries
+                    id_prop_used = None
+            except:
+                pass
+
+        if not node_found:
             return []
 
         # Get outgoing relationships
-        query = f"""
-        MATCH (n:{label} {{_id: $node_id}})-[r]->(m)
-        RETURN type(r) as rel_type,
-               labels(m) as target_labels,
-               m as target_node,
-               'outgoing' as direction
-        """
+        if id_prop_used:
+            query = f"""
+            MATCH (n:{label} {{{id_prop_used}: $node_id}})-[r]->(m)
+            RETURN type(r) as rel_type,
+                   labels(m) as target_labels,
+                   m as target_node,
+                   'outgoing' as direction
+            """
+        else:
+            query = f"""
+            MATCH (n:{label})-[r]->(m)
+            WHERE any(prop IN keys(n) WHERE toString(n[prop]) = $node_id)
+            RETURN type(r) as rel_type,
+                   labels(m) as target_labels,
+                   m as target_node,
+                   'outgoing' as direction
+            LIMIT 1000
+            """
         outgoing = self.conn.execute_query(query, {'node_id': node_id})
 
         # Get incoming relationships
-        query = f"""
-        MATCH (n:{label} {{_id: $node_id}})<-[r]-(m)
-        RETURN type(r) as rel_type,
-               labels(m) as source_labels,
-               m as source_node,
-               'incoming' as direction
-        """
+        if id_prop_used:
+            query = f"""
+            MATCH (n:{label} {{{id_prop_used}: $node_id}})<-[r]-(m)
+            RETURN type(r) as rel_type,
+                   labels(m) as source_labels,
+                   m as source_node,
+                   'incoming' as direction
+            """
+        else:
+            query = f"""
+            MATCH (n:{label})<-[r]-(m)
+            WHERE any(prop IN keys(n) WHERE toString(n[prop]) = $node_id)
+            RETURN type(r) as rel_type,
+                   labels(m) as source_labels,
+                   m as source_node,
+                   'incoming' as direction
+            LIMIT 1000
+            """
         incoming = self.conn.execute_query(query, {'node_id': node_id})
 
         relationships = []

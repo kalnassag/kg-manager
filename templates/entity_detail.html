@@ -87,7 +87,8 @@
                     <h3 class="subgroup-title">{{ humanize_label(product_label) }} ({{ related_items|length }})</h3>
                     <div class="related-products-grid">
                         {% for rel in related_items[:20] %}
-                        <a href="/entities/{{ rel.labels[0] }}/{{ rel.node._id }}"
+                        {% set rel_id_prop, rel_id_val = get_entity_id(rel.node) %}
+                        <a href="/entities/{{ rel.labels[0] }}/{{ rel_id_val }}"
                            class="related-product-card">
                             {{ get_display_name(rel.node, rel.labels[0]) }}
                         </a>
@@ -126,8 +127,9 @@
                     </h3>
                     <ul class="relationship-list">
                         {% for rel in rel_list %}
+                        {% set rel_id_prop, rel_id_val = get_entity_id(rel.node) %}
                         <li class="relationship-item">
-                            <a href="/entities/{{ rel.labels[0] }}/{{ rel.node._id }}"
+                            <a href="/entities/{{ rel.labels[0] }}/{{ rel_id_val }}"
                                class="relationship-link">
                                 {{ get_display_name(rel.node, rel.labels[0]) }}
                             </a>

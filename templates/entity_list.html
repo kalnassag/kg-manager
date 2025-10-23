@@ -49,7 +49,8 @@
         <!-- List View -->
         <div class="entity-list">
             {% for entity in entities %}
-            <a href="/entities/{{ label }}/{{ entity._id }}" class="entity-list-item">
+            {% set entity_id_prop, entity_id_val = get_entity_id(entity) %}
+            <a href="/entities/{{ label }}/{{ entity_id_val }}" class="entity-list-item">
                 <div class="entity-list-item-main">
                     <h3 class="entity-list-item-title">{{ get_display_name(entity, label) }}</h3>
                     <div class="entity-list-item-props">
@@ -84,9 +85,10 @@
                 </thead>
                 <tbody>
                     {% for entity in entities %}
+                    {% set entity_id_prop, entity_id_val = get_entity_id(entity) %}
                     <tr>
                         <td>
-                            <a href="/entities/{{ label }}/{{ entity._id }}" class="table-link">
+                            <a href="/entities/{{ label }}/{{ entity_id_val }}" class="table-link">
                                 {{ get_display_name(entity, label) }}
                             </a>
                         </td>
@@ -96,7 +98,7 @@
                             {% endif %}
                         {% endfor %}
                         <td>
-                            <a href="/entities/{{ label }}/{{ entity._id }}/edit" class="btn-small">Edit</a>
+                            <a href="/entities/{{ label }}/{{ entity_id_val }}/edit" class="btn-small">Edit</a>
                         </td>
                     </tr>
                     {% endfor %}

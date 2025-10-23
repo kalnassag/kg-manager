@@ -68,12 +68,33 @@ class EntityQueries:
         }
 
     def get_entity_by_id(self, label: str, entity_id: str) -> Optional[Dict]:
-        """Get a single entity by its ID."""
-        query = f"MATCH (n:{label} {{_id: $id}}) RETURN n"
-        results = self.conn.execute_query(query, {'id': entity_id})
+        """Get a single entity by its ID (tries multiple identifier properties)."""
+        # Try common identifier properties in order
+        id_properties = ['_id', 'id', 'name', 'model', 'code']
 
-        if results:
-            return dict(results[0]['n'])
+        for id_prop in id_properties:
+            query = f"MATCH (n:{label} {{{id_prop}: $id}}) RETURN n"
+            try:
+                results = self.conn.execute_query(query, {'id': entity_id})
+                if results:
+                    return dict(results[0]['n'])
+            except:
+                continue
+
+        # If none of the standard properties work, try to find by any property value
+        query = f"""
+        MATCH (n:{label})
+        WHERE any(prop IN keys(n) WHERE toString(n[prop]) = $id)
+        RETURN n
+        LIMIT 1
+        """
+        try:
+            results = self.conn.execute_query(query, {'id': entity_id})
+            if results:
+                return dict(results[0]['n'])
+        except:
+            pass
+
         return None
 
     def create_entity(self, label: str, properties: Dict) -> Dict:

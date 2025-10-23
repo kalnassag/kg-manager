@@ -30,7 +30,8 @@
 
             <div class="entity-list">
                 {% for entity in results %}
-                <a href="/entities/{{ entity._labels[0] }}/{{ entity._id }}" class="entity-list-item">
+                {% set entity_id_prop, entity_id_val = get_entity_id(entity) %}
+                <a href="/entities/{{ entity._labels[0] }}/{{ entity_id_val }}" class="entity-list-item">
                     <div class="entity-list-item-main">
                         <h3 class="entity-list-item-title">
                             {{ get_display_name(entity, entity._labels[0]) }}
