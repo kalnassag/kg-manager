@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1 class="page-title">Knowledge Graph Dashboard</h1>
+
+    <!-- Statistics -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number">{{ schema.labels|length }}</div>
+            <div class="stat-label">Total Entity Types</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ schema.product_types|length }}</div>
+            <div class="stat-label">Product Types</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ schema.supporting_entities|length }}</div>
+            <div class="stat-label">Supporting Entities</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ schema.counts.values()|sum }}</div>
+            <div class="stat-label">Total Entities</div>
+        </div>
+    </div>
+
+    <!-- Product Types Section -->
+    {% if schema.product_types %}
+    <section class="entity-section">
+        <h2 class="section-title">Product Types</h2>
+        <div class="entity-grid">
+            {% for label in schema.product_types %}
+            <a href="/entities/{{ label }}" class="entity-card">
+                <div class="entity-card-header">
+                    <h3 class="entity-card-title">{{ humanize_label(label) }}</h3>
+                    <span class="entity-badge product-badge">Product</span>
+                </div>
+                <div class="entity-card-body">
+                    <div class="entity-count">{{ schema.counts.get(label, 0) }} items</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- Supporting Entities Section -->
+    {% if schema.supporting_entities %}
+    <section class="entity-section">
+        <h2 class="section-title">Supporting Entities</h2>
+        <div class="entity-grid">
+            {% for label in schema.supporting_entities %}
+            <a href="/entities/{{ label }}" class="entity-card">
+                <div class="entity-card-header">
+                    <h3 class="entity-card-title">{{ humanize_label(label) }}</h3>
+                    <span class="entity-badge supporting-badge">Supporting</span>
+                </div>
+                <div class="entity-card-body">
+                    <div class="entity-count">{{ schema.counts.get(label, 0) }} items</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

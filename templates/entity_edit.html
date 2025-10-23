@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ display_name }} - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="entity-edit-page">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/entities/{{ label }}/{{ entity_id }}" class="back-link">&larr; Back to {{ display_name }}</a>
+            <h1 class="page-title">Edit {{ label_human }}</h1>
+        </div>
+    </div>
+
+    <form method="post" action="/entities/{{ label }}/{{ entity_id }}/edit" class="entity-form">
+        <div class="form-container">
+            <!-- Properties Section -->
+            <div class="form-properties">
+                {% for group_name, group_content in grouped_properties %}
+                <div class="form-group-section">
+                    <h2 class="form-section-title">{{ group_name }}</h2>
+
+                    {% if group_content is mapping %}
+                        <!-- Check if nested -->
+                        {% set has_subgroups = namespace(value=false) %}
+                        {% for key, value in group_content.items() %}
+                            {% if value is mapping and key != '_ungrouped' %}
+                                {% set has_subgroups.value = true %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if has_subgroups.value %}
+                            <!-- Nested groups -->
+                            {% for sub_group_name, sub_group_content in group_content.items() %}
+                                {% if sub_group_content is mapping and sub_group_name != '_ungrouped' %}
+                                <div class="form-subgroup">
+                                    <h3 class="form-subgroup-title">{{ sub_group_name }}</h3>
+                                    {% for prop_name, prop_value in sub_group_content.items() %}
+                                    <div class="form-field">
+                                        <label for="{{ prop_name }}" class="form-label">
+                                            {{ humanize_property_name(prop_name) }}
+                                        </label>
+                                        {% if get_input_type(prop_name) == 'checkbox' %}
+                                            <input type="checkbox"
+                                                   id="{{ prop_name }}"
+                                                   name="{{ prop_name }}"
+                                                   {% if prop_value %}checked{% endif %}
+                                                   {% if prop_name == '_id' %}disabled{% endif %}>
+                                        {% else %}
+                                            <input type="{{ get_input_type(prop_name) }}"
+                                                   id="{{ prop_name }}"
+                                                   name="{{ prop_name }}"
+                                                   value="{{ prop_value if prop_value is not none else '' }}"
+                                                   {% if prop_name == '_id' %}readonly{% endif %}
+                                                   class="form-input">
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% elif not (sub_group_content is mapping) %}
+                                <div class="form-field">
+                                    <label for="{{ sub_group_name }}" class="form-label">
+                                        {{ humanize_property_name(sub_group_name) }}
+                                    </label>
+                                    {% if get_input_type(sub_group_name) == 'checkbox' %}
+                                        <input type="checkbox"
+                                               id="{{ sub_group_name }}"
+                                               name="{{ sub_group_name }}"
+                                               {% if sub_group_content %}checked{% endif %}
+                                               {% if sub_group_name == '_id' %}disabled{% endif %}>
+                                    {% else %}
+                                        <input type="{{ get_input_type(sub_group_name) }}"
+                                               id="{{ sub_group_name }}"
+                                               name="{{ sub_group_name }}"
+                                               value="{{ sub_group_content if sub_group_content is not none else '' }}"
+                                               {% if sub_group_name == '_id' %}readonly{% endif %}
+                                               class="form-input">
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <!-- Flat properties -->
+                            {% for prop_name, prop_value in group_content.items() %}
+                            <div class="form-field">
+                                <label for="{{ prop_name }}" class="form-label">
+                                    {{ humanize_property_name(prop_name) }}
+                                </label>
+                                {% if get_input_type(prop_name) == 'checkbox' %}
+                                    <input type="checkbox"
+                                           id="{{ prop_name }}"
+                                           name="{{ prop_name }}"
+                                           {% if prop_value %}checked{% endif %}
+                                           {% if prop_name == '_id' %}disabled{% endif %}>
+                                {% else %}
+                                    <input type="{{ get_input_type(prop_name) }}"
+                                           id="{{ prop_name }}"
+                                           name="{{ prop_name }}"
+                                           value="{{ prop_value if prop_value is not none else '' }}"
+                                           {% if prop_name == '_id' %}readonly{% endif %}
+                                           class="form-input">
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="/entities/{{ label }}/{{ entity_id }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </div>
+
+            <!-- Relationships Info -->
+            <div class="form-sidebar">
+                <h2 class="sidebar-title">Relationships</h2>
+                <p class="sidebar-note">Relationships are managed from the entity detail view.</p>
+
+                {% if relationships %}
+                <div class="relationships-summary">
+                    {% set rels_by_type = {} %}
+                    {% for rel in relationships %}
+                        {% set key = rel.type %}
+                        {% if key not in rels_by_type %}
+                            {% set _ = rels_by_type.update({key: 0}) %}
+                        {% endif %}
+                        {% set _ = rels_by_type.update({key: rels_by_type[key] + 1}) %}
+                    {% endfor %}
+
+                    {% for rel_type, count in rels_by_type.items() %}
+                    <div class="rel-summary-item">
+                        <strong>{{ humanize_relationship_type(rel_type) }}:</strong> {{ count }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

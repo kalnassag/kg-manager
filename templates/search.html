@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="search-page">
+    <!-- Header -->
+    <div class="page-header">
+        <h1 class="page-title">Search</h1>
+    </div>
+
+    <!-- Search Form -->
+    <div class="search-container">
+        <form method="get" action="/search" class="search-form-large">
+            <input type="text"
+                   name="q"
+                   value="{{ query }}"
+                   placeholder="Search across all entities..."
+                   class="search-input-large"
+                   autofocus>
+            <button type="submit" class="btn btn-primary btn-large">Search</button>
+        </form>
+    </div>
+
+    <!-- Results -->
+    {% if query %}
+        {% if results %}
+        <div class="search-results">
+            <h2 class="section-title">Found {{ results|length }} results for "{{ query }}"</h2>
+
+            <div class="entity-list">
+                {% for entity in results %}
+                <a href="/entities/{{ entity._labels[0] }}/{{ entity._id }}" class="entity-list-item">
+                    <div class="entity-list-item-main">
+                        <h3 class="entity-list-item-title">
+                            {{ get_display_name(entity, entity._labels[0]) }}
+                        </h3>
+                        <span class="entity-type-badge-small">{{ humanize_label(entity._labels[0]) }}</span>
+                        <div class="entity-list-item-props">
+                            {% for key, value in entity.items() %}
+                                {% if not key.startswith('_') and loop.index <= 4 %}
+                                <span class="prop-inline">
+                                    <span class="prop-label">{{ humanize_property_name(key) }}:</span>
+                                    <span class="prop-value">{{ value }}</span>
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="entity-list-item-arrow">→</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No results found for "{{ query }}"</p>
+            <p>Try searching with different keywords or check your spelling.</p>
+        </div>
+        {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <p>Enter a search term to find entities in the knowledge graph.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+# Neo4j Configuration Template
+# Copy this file to config.yaml and fill in your Neo4j credentials
+
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  password: "your_password_here"
+
+# Application Settings
+app:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+
+# UI Settings
+ui:
+  items_per_page: 100
+  default_view: "list"  # Options: "list" or "table"

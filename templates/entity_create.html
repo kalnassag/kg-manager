@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Create New {{ label_human }} - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="entity-create-page">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/entities/{{ label }}" class="back-link">&larr; Back to {{ label_human }}</a>
+            <h1 class="page-title">Create New {{ label_human }}</h1>
+        </div>
+    </div>
+
+    <form method="post" action="/entities/{{ label }}/new" class="entity-form">
+        <div class="form-container">
+            <div class="form-properties">
+                <div class="form-group-section">
+                    <h2 class="form-section-title">Entity Properties</h2>
+
+                    <!-- Always show _id field first (required) -->
+                    <div class="form-field">
+                        <label for="_id" class="form-label">
+                            ID <span class="required">*</span>
+                        </label>
+                        <input type="text"
+                               id="_id"
+                               name="_id"
+                               required
+                               class="form-input"
+                               placeholder="Unique identifier for this entity">
+                    </div>
+
+                    <!-- Show sample properties -->
+                    {% for prop_name in sample_props %}
+                        {% if prop_name != '_id' and not prop_name.startswith('_') %}
+                        <div class="form-field">
+                            <label for="{{ prop_name }}" class="form-label">
+                                {{ humanize_property_name(prop_name) }}
+                            </label>
+                            {% if get_input_type(prop_name) == 'checkbox' %}
+                                <input type="checkbox"
+                                       id="{{ prop_name }}"
+                                       name="{{ prop_name }}">
+                            {% else %}
+                                <input type="{{ get_input_type(prop_name) }}"
+                                       id="{{ prop_name }}"
+                                       name="{{ prop_name }}"
+                                       class="form-input"
+                                       placeholder="Optional">
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create {{ label_human }}</button>
+                    <a href="/entities/{{ label }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </div>
+
+            <div class="form-sidebar">
+                <h2 class="sidebar-title">Create New Entity</h2>
+                <p class="sidebar-note">
+                    Fill in the properties for your new {{ label_human }}.
+                    Only the ID field is required. You can add or modify other properties later.
+                </p>
+                <p class="sidebar-note">
+                    After creating the entity, you can add relationships from the detail view.
+                </p>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

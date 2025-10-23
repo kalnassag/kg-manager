@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}{{ label_human }} - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="entity-list-page">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/" class="back-link">&larr; Back to Dashboard</a>
+            <h1 class="page-title">{{ label_human }}</h1>
+            <span class="entity-count-badge">{{ total }} items</span>
+        </div>
+        <div class="page-header-right">
+            <a href="/entities/{{ label }}/new" class="btn btn-primary">+ Create New</a>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <!-- Search -->
+            <form method="get" class="search-form inline">
+                <input type="text" name="search" value="{{ search }}" placeholder="Search..." class="search-input">
+                <button type="submit" class="btn btn-secondary">Search</button>
+                {% if search %}
+                <a href="/entities/{{ label }}" class="btn btn-secondary">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+        <div class="toolbar-right">
+            <!-- View Toggle -->
+            <div class="view-toggle">
+                <a href="?view=list{% if search %}&search={{ search }}{% endif %}"
+                   class="view-btn {% if view_mode == 'list' %}active{% endif %}">
+                    List View
+                </a>
+                <a href="?view=table{% if search %}&search={{ search }}{% endif %}"
+                   class="view-btn {% if view_mode == 'table' %}active{% endif %}">
+                    Table View
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity List/Table -->
+    {% if entities %}
+        {% if view_mode == 'list' %}
+        <!-- List View -->
+        <div class="entity-list">
+            {% for entity in entities %}
+            <a href="/entities/{{ label }}/{{ entity._id }}" class="entity-list-item">
+                <div class="entity-list-item-main">
+                    <h3 class="entity-list-item-title">{{ get_display_name(entity, label) }}</h3>
+                    <div class="entity-list-item-props">
+                        {% for key, value in entity.items() %}
+                            {% if not key.startswith('_') and loop.index <= 4 %}
+                            <span class="prop-inline">
+                                <span class="prop-label">{{ humanize_property_name(key) }}:</span>
+                                <span class="prop-value">{{ value }}</span>
+                            </span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="entity-list-item-arrow">→</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <!-- Table View -->
+        <div class="table-container">
+            <table class="entity-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        {% for prop in sample_props[:8] %}
+                            {% if not prop.startswith('_') %}
+                            <th>{{ humanize_property_name(prop) }}</th>
+                            {% endif %}
+                        {% endfor %}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entity in entities %}
+                    <tr>
+                        <td>
+                            <a href="/entities/{{ label }}/{{ entity._id }}" class="table-link">
+                                {{ get_display_name(entity, label) }}
+                            </a>
+                        </td>
+                        {% for prop in sample_props[:8] %}
+                            {% if not prop.startswith('_') %}
+                            <td>{{ entity.get(prop, '') }}</td>
+                            {% endif %}
+                        {% endfor %}
+                        <td>
+                            <a href="/entities/{{ label }}/{{ entity._id }}/edit" class="btn-small">Edit</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if view_mode %}&view={{ view_mode }}{% endif %}"
+               class="pagination-btn">← Previous</a>
+            {% endif %}
+
+            <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
+
+            {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if view_mode %}&view={{ view_mode }}{% endif %}"
+               class="pagination-btn">Next →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    {% else %}
+        <div class="empty-state">
+            <p>No {{ label_human }} found.</p>
+            {% if search %}
+            <p><a href="/entities/{{ label }}">Clear search</a> to see all items.</p>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

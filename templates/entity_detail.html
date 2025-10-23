@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ display_name }} - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="entity-detail-page">
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/entities/{{ label }}" class="back-link">&larr; Back to {{ label_human }}</a>
+            <div class="entity-header">
+                <h1 class="entity-title">{{ display_name }}</h1>
+                <span class="entity-type-badge">{{ label_human }}</span>
+            </div>
+        </div>
+        <div class="page-header-right">
+            <a href="/entities/{{ label }}/{{ entity_id }}/edit" class="btn btn-primary">Edit</a>
+            <form method="post" action="/entities/{{ label }}/{{ entity_id }}/delete" style="display: inline;">
+                <button type="submit" class="btn btn-danger"
+                        onclick="return confirm('Are you sure you want to delete this entity? All relationships will also be removed.')">
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="entity-detail-container">
+        <!-- Properties Section -->
+        <div class="entity-properties">
+            {% for group_name, group_content in grouped_properties %}
+            <div class="property-group">
+                <h2 class="group-title">{{ group_name }}</h2>
+
+                {% if group_content is mapping %}
+                    <!-- Check if this is a nested group -->
+                    {% set has_subgroups = namespace(value=false) %}
+                    {% for key, value in group_content.items() %}
+                        {% if value is mapping and key != '_ungrouped' %}
+                            {% set has_subgroups.value = true %}
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if has_subgroups.value %}
+                        <!-- Nested groups -->
+                        {% for sub_group_name, sub_group_content in group_content.items() %}
+                            {% if sub_group_content is mapping and sub_group_name != '_ungrouped' %}
+                            <div class="property-subgroup">
+                                <h3 class="subgroup-title">{{ sub_group_name }}</h3>
+                                <div class="properties">
+                                    {% for prop_name, prop_value in sub_group_content.items() %}
+                                    <div class="property-row">
+                                        <span class="property-label">{{ humanize_property_name(prop_name) }}</span>
+                                        <span class="property-value">{{ prop_value }}</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% elif not (sub_group_content is mapping) %}
+                            <!-- Ungrouped properties in main group -->
+                            <div class="property-row">
+                                <span class="property-label">{{ humanize_property_name(sub_group_name) }}</span>
+                                <span class="property-value">{{ sub_group_content }}</span>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <!-- Flat properties -->
+                        <div class="properties">
+                            {% for prop_name, prop_value in group_content.items() %}
+                            <div class="property-row">
+                                <span class="property-label">{{ humanize_property_name(prop_name) }}</span>
+                                <span class="property-value">{{ prop_value }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Relationships Sidebar -->
+        <div class="entity-relationships">
+            <h2 class="relationships-title">Relationships</h2>
+
+            {% if relationships %}
+                {% set rels_by_type = {} %}
+                {% for rel in relationships %}
+                    {% set key = rel.type + '_' + rel.direction %}
+                    {% if key not in rels_by_type %}
+                        {% set _ = rels_by_type.update({key: []}) %}
+                    {% endif %}
+                    {% set _ = rels_by_type[key].append(rel) %}
+                {% endfor %}
+
+                {% for rel_key, rel_list in rels_by_type.items() %}
+                <div class="relationship-group">
+                    <h3 class="relationship-type">
+                        {{ humanize_relationship_type(rel_list[0].type) }}
+                        <span class="relationship-direction">({{ rel_list[0].direction }})</span>
+                    </h3>
+                    <ul class="relationship-list">
+                        {% for rel in rel_list %}
+                        <li class="relationship-item">
+                            <a href="/entities/{{ rel.labels[0] }}/{{ rel.node._id }}"
+                               class="relationship-link">
+                                {{ get_display_name(rel.node, rel.labels[0]) }}
+                            </a>
+                            <span class="relationship-label">{{ humanize_label(rel.labels[0]) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="no-relationships">No relationships found.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
