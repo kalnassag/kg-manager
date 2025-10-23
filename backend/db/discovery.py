@@ -25,8 +25,7 @@ class SchemaDiscovery:
         query = f"""
         MATCH (n:{label})
         UNWIND keys(n) AS key
-        RETURN DISTINCT key,
-               collect(DISTINCT type(n[key])) AS types
+        RETURN DISTINCT key
         ORDER BY key
         """
         results = self.conn.execute_query(query)
@@ -34,8 +33,8 @@ class SchemaDiscovery:
         properties = {}
         for record in results:
             prop_name = record['key']
-            types = record['types']
-            properties[prop_name] = set(types)
+            # We use a placeholder set - actual type validation is done by naming convention
+            properties[prop_name] = set()
 
         logger.info(f"Found {len(properties)} properties for {label}")
         return properties
