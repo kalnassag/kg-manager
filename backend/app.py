@@ -322,6 +322,50 @@ async def get_schema():
     discovery = get_discovery()
     return discovery.get_all_schema_info()
 
+@app.get("/api/entity-types")
+async def get_entity_types():
+    """API endpoint for entity types (node labels)."""
+    discovery = get_discovery()
+    schema = discovery.get_all_schema_info()
+
+    # Combine product types and supporting entities
+    entity_types = []
+    for label in schema['product_types']:
+        entity_types.append({
+            'label': label,
+            'type': 'product',
+            'count': schema.get('counts', {}).get(label, 0)
+        })
+
+    for label in schema['supporting_entities']:
+        entity_types.append({
+            'label': label,
+            'type': 'supporting',
+            'count': schema.get('counts', {}).get(label, 0)
+        })
+
+    return {'entity_types': entity_types}
+
+@app.get("/api/graph/relationships")
+async def get_relationship_types():
+    """API endpoint for relationship types."""
+    from .db.connection import get_connection
+    conn = get_connection()
+
+    query = """
+    CALL db.relationshipTypes() YIELD relationshipType
+    RETURN relationshipType
+    ORDER BY relationshipType
+    """
+
+    try:
+        results = conn.execute_query(query)
+        rel_types = [record['relationshipType'] for record in results]
+        return {'relationships': rel_types}
+    except Exception as e:
+        logger.error(f"Error fetching relationship types: {e}")
+        return {'relationships': []}
+
 # Graph Visualization Routes
 
 @app.get("/graph", response_class=HTMLResponse)
@@ -552,6 +596,110 @@ async def explore_graph(
 async def expand_node(label: str, entity_id: str, depth: int = 1):
     """Expand a specific node to show its connections."""
     return await explore_graph(label=label, entity_id=entity_id, depth=depth, limit=100)
+
+# Pattern Management Routes
+
+@app.get("/patterns", response_class=HTMLResponse)
+async def patterns_page(request: Request):
+    """Pattern library page."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    patterns = pattern_mgr.list_patterns(limit=50)
+
+    return templates.TemplateResponse("patterns.html", {
+        "request": request,
+        "patterns": patterns
+    })
+
+@app.post("/api/patterns/save")
+async def save_pattern(request: Request):
+    """Save a new pattern."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    data = await request.json()
+
+    try:
+        pattern = pattern_mgr.save_pattern(data)
+        return {"success": True, "pattern": pattern}
+    except Exception as e:
+        logger.error(f"Failed to save pattern: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/patterns/list")
+async def list_patterns(limit: int = 100, offset: int = 0):
+    """List all saved patterns."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    patterns = pattern_mgr.list_patterns(limit=limit, offset=offset)
+    return {"patterns": patterns}
+
+@app.get("/api/patterns/{pattern_id}")
+async def get_pattern(pattern_id: str):
+    """Get a single pattern."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    pattern = pattern_mgr.get_pattern(pattern_id)
+    if pattern:
+        return pattern
+    raise HTTPException(status_code=404, detail="Pattern not found")
+
+@app.put("/api/patterns/{pattern_id}")
+async def update_pattern(pattern_id: str, request: Request):
+    """Update a pattern."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    data = await request.json()
+    pattern = pattern_mgr.update_pattern(pattern_id, data)
+
+    if pattern:
+        return {"success": True, "pattern": pattern}
+    raise HTTPException(status_code=404, detail="Pattern not found")
+
+@app.delete("/api/patterns/{pattern_id}")
+async def delete_pattern(pattern_id: str):
+    """Delete a pattern."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    success = pattern_mgr.delete_pattern(pattern_id)
+    if success:
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="Pattern not found")
+
+@app.get("/api/patterns/search")
+async def search_patterns(q: str):
+    """Search patterns."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    patterns = pattern_mgr.search_patterns(q)
+    return {"patterns": patterns}
+
+@app.post("/api/patterns/{pattern_id}/execute")
+async def execute_pattern(pattern_id: str):
+    """Execute a saved pattern."""
+    from .db.patterns import get_pattern_manager
+    pattern_mgr = get_pattern_manager()
+
+    pattern = pattern_mgr.get_pattern(pattern_id)
+    if not pattern:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+
+    # Execute the Cypher query
+    from .db.connection import get_connection
+    conn = get_connection()
+
+    try:
+        results = conn.execute_query(pattern['cypher_query'])
+        return {"success": True, "results": results}
+    except Exception as e:
+        logger.error(f"Failed to execute pattern: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
