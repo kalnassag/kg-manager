@@ -293,6 +293,9 @@ class SchemaDiscovery:
         if SCHEMA_CACHE_FILE.exists():
             SCHEMA_CACHE_FILE.unlink()
 
+        # Get fresh connection in case the old one is stale
+        self.conn = get_connection()
+
         # Return fresh schema (which will be cached)
         return self.get_all_schema_info()
 
