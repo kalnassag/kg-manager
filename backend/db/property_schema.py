@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Any, Tuple
 import logging
 from datetime import datetime
 
-from .connection import Neo4jConnection
+from .connection import Neo4jConnection, get_connection
 
 
 # Configure logging
@@ -24,14 +24,9 @@ class PropertySchemaQueries:
     translation management, and property discovery from actual data.
     """
 
-    def __init__(self, connection: Neo4jConnection):
-        """
-        Initialize property schema queries.
-
-        Args:
-            connection: Neo4j connection instance
-        """
-        self.connection = connection
+    def __init__(self):
+        """Initialize property schema queries."""
+        self.connection = get_connection()
 
     # ============================================================================
     # Property Definition CRUD
@@ -611,22 +606,29 @@ class PropertySchemaQueries:
             logger.error(f"Error getting coverage report: {e}")
             raise
 
-    def get_entity_types(self) -> List[str]:
+    def get_entity_types(self) -> List[Dict[str, Any]]:
         """
         Get list of entity types that have PropertyDefinitions.
 
         Returns:
-            List of entity type names
+            List of dictionaries with entity_type and property_count
         """
         query = """
         MATCH (pd:PropertyDefinition)
-        RETURN DISTINCT pd.entity_type as entity_type
+        WITH pd.entity_type as entity_type, count(pd) as property_count
+        RETURN entity_type, property_count
         ORDER BY entity_type
         """
 
         try:
             results = self.connection.execute_query(query)
-            entity_types = [r['entity_type'] for r in results]
+            entity_types = [
+                {
+                    'entity_type': r['entity_type'],
+                    'property_count': r['property_count']
+                }
+                for r in results
+            ]
             return entity_types
         except Exception as e:
             logger.error(f"Error getting entity types: {e}")
@@ -637,12 +639,9 @@ class PropertySchemaQueries:
 _property_schema_queries: Optional[PropertySchemaQueries] = None
 
 
-def get_property_schema_queries(connection: Neo4jConnection = None) -> PropertySchemaQueries:
+def get_property_schema_queries() -> PropertySchemaQueries:
     """
     Get or create the global PropertySchemaQueries instance.
-
-    Args:
-        connection: Neo4j connection (required on first call)
 
     Returns:
         Global PropertySchemaQueries instance
@@ -650,8 +649,6 @@ def get_property_schema_queries(connection: Neo4jConnection = None) -> PropertyS
     global _property_schema_queries
 
     if _property_schema_queries is None:
-        if connection is None:
-            raise ValueError("Connection required for first initialization")
-        _property_schema_queries = PropertySchemaQueries(connection)
+        _property_schema_queries = PropertySchemaQueries()
 
     return _property_schema_queries
