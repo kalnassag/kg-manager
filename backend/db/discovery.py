@@ -219,11 +219,19 @@ class SchemaDiscovery:
         products, supporting = self.categorize_labels(labels)
         relationships = self.discover_relationships()
 
+        # Get properties for each label (for LLM context)
+        properties_by_label = {}
+        for label in labels:
+            props = self.get_node_properties(label)
+            properties_by_label[label] = sorted(props.keys())
+
         schema = {
             'labels': labels,
             'product_types': products,
             'supporting_entities': supporting,
             'relationships': relationships,
+            'relationship_types': [r['type'] for r in relationships],
+            'properties': properties_by_label,
             'counts': {label: self.get_node_count(label) for label in labels}
         }
 

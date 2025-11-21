@@ -68,9 +68,30 @@ CRITICAL RULES:
             # Build schema section
             labels = graph_schema.get('labels', [])
             relationships = graph_schema.get('relationship_types', [])
+            properties = graph_schema.get('properties', {})
 
             # Format relationship types more prominently
             rel_list = '\n'.join([f"  - {rel}" for rel in relationships]) if relationships else "  (none defined)"
+
+            # Format properties for key entity types (limit to avoid token overflow)
+            properties_section = ""
+            key_entity_types = [label for label in labels if label in properties]
+
+            # Prioritize product types
+            product_types = graph_schema.get('product_types', [])
+            key_entities = [e for e in product_types if e in key_entity_types][:5]  # Top 5 product types
+
+            if key_entities:
+                properties_section = "\n\n### Available Properties by Entity Type:\n"
+                for entity in key_entities:
+                    props = properties.get(entity, [])
+                    if props:
+                        # Show first 20 properties to avoid overwhelming the prompt
+                        displayed_props = props[:20]
+                        props_list = ', '.join(displayed_props)
+                        if len(props) > 20:
+                            props_list += f", ... ({len(props) - 20} more)"
+                        properties_section += f"\n**{entity}**: {props_list}"
 
             schema_section = f"""
 
@@ -81,13 +102,13 @@ CRITICAL RULES:
 
 ### Available Relationship Types (USE THESE EXACTLY):
 {rel_list}
+{properties_section}
 
-### Property Naming Patterns:
-- _id: Unique identifier (required)
-- name: Entity name
-- Properties often follow patterns like: inside_*, design_*, display_*, camera_*
-- For technical specs, check for prefixed properties (e.g., inside_ram_size_gb, inside_cpu_model)
-- Brand relationships use the relationship types listed above"""
+### CRITICAL Property Usage Rules:
+1. ONLY use property names exactly as shown above for each entity type
+2. DO NOT guess or assume property names - if not listed above, ask for clarification
+3. ALL property names must match EXACTLY (case-sensitive)
+4. Common properties: _id (unique identifier), name (entity name)"""
 
         examples_section = ""
         if self.prompt_config.include_examples:
