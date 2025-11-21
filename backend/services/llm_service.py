@@ -123,28 +123,53 @@ CRITICAL RULES:
 
         examples_section = ""
         if self.prompt_config.include_examples:
-            # Generate examples using actual schema
-            examples_section = """
+            # Generate examples dynamically from actual schema
+            properties = graph_schema.get('properties', {})
+            product_types = graph_schema.get('product_types', [])
+            relationships = graph_schema.get('relationship_types', [])
 
-## Example Queries:
+            examples = []
 
-Question: "What laptops do we have?"
-Cypher: MATCH (l:Laptop) RETURN l.name, l._id LIMIT 50
+            # Example 1: Simple match for first product type
+            if product_types:
+                first_product = product_types[0]
+                examples.append(f'Question: "What {first_product.lower()}s do we have?"\nCypher: MATCH (n:{first_product}) RETURN n.name, n._id LIMIT 50')
 
-Question: "Find laptops with more than 16GB RAM"
-Cypher: MATCH (l:Laptop) WHERE l.inside_ram_size_gb > 16 RETURN l.name, l.inside_ram_size_gb, l._id LIMIT 50
+            # Example 2: Property filter using actual properties
+            if product_types and properties:
+                for ptype in product_types[:2]:  # Check first 2 product types
+                    props = properties.get(ptype, [])
+                    # Find a numeric property for filtering
+                    numeric_props = [p for p in props if any(x in p.lower() for x in ['size', 'capacity', 'gb', 'weight', 'inches'])]
+                    if numeric_props:
+                        prop = numeric_props[0]
+                        examples.append(f'Question: "Find {ptype.lower()}s with large {prop.replace("_", " ")}"\nCypher: MATCH (n:{ptype}) WHERE n.{prop} > 100 RETURN n.name, n.{prop}, n._id LIMIT 50')
+                        break
 
-Question: "Show me all brands"
-Cypher: MATCH (b:Brand) RETURN b.name LIMIT 50
+            # Example 3: Relationship traversal using actual relationships
+            if relationships and product_types:
+                # Find a relationship that makes sense
+                for rel in relationships:
+                    if 'MADE_BY' in rel or 'HAS_' in rel:
+                        target = 'Brand' if 'MADE_BY' in rel else rel.split('_')[-1].title()
+                        examples.append(f'Question: "Show me {product_types[0].lower()}s and their {target.lower()}s"\nCypher: MATCH (n:{product_types[0]})-[:{rel}]->(t:{target}) RETURN n.name, t.name LIMIT 50')
+                        break
+
+            # Build examples section
+            if examples:
+                examples_section = "\n\n## Example Queries (using YOUR schema):\n\n"
+                examples_section += "\n\n".join(examples)
+
+            examples_section += """
 
 ## CRITICAL Instructions:
-1. You MUST use ONLY the relationship types listed in the "Graph Schema" section above
-2. DO NOT invent or assume relationship names - use EXACTLY what is shown in the schema
-3. The schema shows ALL available relationship types - there are no others
-4. If a relationship seems missing, describe the limitation in your response
-5. Always use property names that exist in the actual data (check common patterns like inside_*, design_*, etc.)
+1. You MUST use ONLY the exact property names listed in the schema above
+2. You MUST use ONLY the exact relationship types listed in the schema above
+3. DO NOT invent, guess, or assume ANY names - use EXACTLY what is shown
+4. If you see "inside_storage_capacity" in the schema, use that EXACT name, not "inside_storage_size_gb"
+5. If a needed property or relationship is not in the schema, explain the limitation
 6. Return ONLY the Cypher query, no explanation
-7. Add LIMIT clause to prevent returning too many results"""
+7. Always add LIMIT clause to prevent returning too many results"""
 
         return base_prompt + schema_section + examples_section
 
