@@ -47,14 +47,16 @@ class LLMService:
         else:
             base_prompt = """You are an expert Neo4j Cypher query generator. Your task is to convert natural language questions into valid Cypher queries.
 
-Important rules:
-1. Generate ONLY valid Cypher syntax
-2. Use MATCH clauses for retrieving data
-3. Use WHERE clauses for filtering
-4. Return relevant properties using RETURN
-5. Limit results to 50 unless specified otherwise
-6. Use case-insensitive matching with toLower() when appropriate
-7. Handle property names exactly as they appear in the schema"""
+CRITICAL RULES:
+1. Use ONLY the exact node labels, relationship types, and property names provided in the schema
+2. DO NOT invent, assume, or hallucinate any relationship names - use EXACTLY what appears in the schema
+3. If the schema shows relationship types, those are the ONLY ones that exist
+4. Generate ONLY valid Cypher syntax
+5. Use MATCH clauses for retrieving data
+6. Use WHERE clauses for filtering
+7. Return relevant properties using RETURN
+8. Limit results to 50 unless specified otherwise
+9. Use case-insensitive matching with toLower() when appropriate for user input"""
 
         schema_section = ""
         if self.prompt_config.include_schema:
@@ -62,46 +64,50 @@ Important rules:
             labels = graph_schema.get('labels', [])
             relationships = graph_schema.get('relationship_types', [])
 
+            # Format relationship types more prominently
+            rel_list = '\n'.join([f"  - {rel}" for rel in relationships]) if relationships else "  (none defined)"
+
             schema_section = f"""
 
-## Graph Schema
+## Graph Schema (EXACT NAMES - DO NOT MODIFY)
 
-### Node Labels:
+### Available Node Labels:
 {', '.join(labels)}
 
-### Relationship Types:
-{', '.join(relationships)}
+### Available Relationship Types (USE THESE EXACTLY):
+{rel_list}
 
-### Common Properties:
-- _id: Unique identifier
+### Property Naming Patterns:
+- _id: Unique identifier (required)
 - name: Entity name
-- brand: Product brand
-- price: Product price
-- category: Product category"""
+- Properties often follow patterns like: inside_*, design_*, display_*, camera_*
+- For technical specs, check for prefixed properties (e.g., inside_ram_size_gb, inside_cpu_model)
+- Brand relationships use the relationship types listed above"""
 
         examples_section = ""
         if self.prompt_config.include_examples:
+            # Generate examples using actual schema
             examples_section = """
 
 ## Example Queries:
 
 Question: "What laptops do we have?"
-Cypher: MATCH (l:Laptop) RETURN l.name, l.brand, l._id LIMIT 50
+Cypher: MATCH (l:Laptop) RETURN l.name, l._id LIMIT 50
 
 Question: "Find laptops with more than 16GB RAM"
-Cypher: MATCH (l:Laptop) WHERE l.ram_gb > 16 RETURN l.name, l.brand, l.ram_gb LIMIT 50
+Cypher: MATCH (l:Laptop) WHERE l.inside_ram_size_gb > 16 RETURN l.name, l.inside_ram_size_gb, l._id LIMIT 50
 
-Question: "What products are from Apple?"
-Cypher: MATCH (p)-[:HAS_BRAND]->(b:Brand {name: 'Apple'}) RETURN p.name, p._id LIMIT 50
+Question: "Show me all brands"
+Cypher: MATCH (b:Brand) RETURN b.name LIMIT 50
 
-Question: "Show me all smartphone brands"
-Cypher: MATCH (s:Smartphone)-[:HAS_BRAND]->(b:Brand) RETURN DISTINCT b.name
-
-## Instructions:
-1. Analyze the question carefully
-2. Identify the entity types and relationships needed
-3. Generate a valid Cypher query
-4. Return ONLY the Cypher query, no explanation"""
+## CRITICAL Instructions:
+1. You MUST use ONLY the relationship types listed in the "Graph Schema" section above
+2. DO NOT invent or assume relationship names - use EXACTLY what is shown in the schema
+3. The schema shows ALL available relationship types - there are no others
+4. If a relationship seems missing, describe the limitation in your response
+5. Always use property names that exist in the actual data (check common patterns like inside_*, design_*, etc.)
+6. Return ONLY the Cypher query, no explanation
+7. Add LIMIT clause to prevent returning too many results"""
 
         return base_prompt + schema_section + examples_section
 
