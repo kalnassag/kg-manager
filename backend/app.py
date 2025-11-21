@@ -366,6 +366,178 @@ async def get_relationship_types():
         logger.error(f"Error fetching relationship types: {e}")
         return {'relationships': []}
 
+# Multilingual / Localization API Endpoints
+
+@app.get("/api/locales")
+async def get_locales():
+    """
+    Get list of supported locales.
+
+    Returns:
+        Dictionary with list of supported locales, default locale, and total count
+    """
+    from .utils.locales import get_all_locales, DEFAULT_LOCALE
+
+    locales = get_all_locales()
+
+    return {
+        'locales': locales,
+        'default_locale': DEFAULT_LOCALE,
+        'total_count': len(locales)
+    }
+
+@app.get("/api/schema/{entity_type}")
+async def get_schema_for_locale(
+    entity_type: str,
+    locale: Optional[str] = None
+):
+    """
+    Get property schema for an entity type with localized labels.
+
+    Args:
+        entity_type: Entity type (e.g., 'Laptop', 'Smartphone')
+        locale: Locale code (e.g., 'es-ES', 'fr'). Defaults to 'en' if not provided
+
+    Returns:
+        Schema with localized property names
+
+    Example:
+        GET /api/schema/Laptop?locale=es-ES
+    """
+    from .db.localization import get_localization_queries
+    from .db.connection import get_connection
+    from .utils.locales import normalize_locale
+
+    # Normalize locale (will default to 'en' if None or unsupported)
+    normalized_locale = normalize_locale(locale)
+
+    try:
+        # Get localization queries instance
+        conn = get_connection()
+        localization = get_localization_queries(conn)
+
+        # Get schema
+        result = localization.get_schema_for_locale(entity_type, normalized_locale)
+
+        # Add total count
+        result['total_properties'] = len(result['properties'])
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error getting schema for locale: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve schema: {str(e)}"
+        )
+
+@app.get("/api/{entity_type}/{entity_id}")
+async def get_entity_localized(
+    entity_type: str,
+    entity_id: str,
+    locale: Optional[str] = None
+):
+    """
+    Get an entity with localized property names.
+
+    Args:
+        entity_type: Entity type (e.g., 'Laptop', 'Smartphone')
+        entity_id: Entity identifier
+        locale: Locale code (e.g., 'es-ES', 'fr'). Defaults to 'en' if not provided
+
+    Returns:
+        Entity data with localized property names
+
+    Example:
+        GET /api/Laptop/ASUS-model?locale=fr
+    """
+    from .db.localization import get_localization_queries
+    from .db.connection import get_connection
+    from .utils.locales import normalize_locale
+    from .utils.display import get_entity_id as find_id_property
+
+    # Normalize locale
+    normalized_locale = normalize_locale(locale)
+
+    try:
+        # Get localization queries instance
+        conn = get_connection()
+        localization = get_localization_queries(conn)
+
+        # Try to find the entity with different ID properties
+        # Common ID properties in priority order
+        id_properties = ['product_model', '_id', 'id', 'name', 'model', 'code']
+
+        result = None
+        for id_prop in id_properties:
+            try:
+                result = localization.get_entity_with_localized_properties(
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    locale=normalized_locale,
+                    id_property=id_prop
+                )
+                if result:
+                    break
+            except Exception:
+                continue
+
+        if not result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Entity not found: {entity_type} with id '{entity_id}'"
+            )
+
+        # Add total count
+        result['total_properties'] = len(result['properties'])
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting entity with localized properties: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve entity: {str(e)}"
+        )
+
+@app.get("/api/translation-coverage/{entity_type}")
+async def get_translation_coverage(entity_type: str):
+    """
+    Get translation coverage report for an entity type.
+
+    Shows which properties have translations in which locales and identifies gaps.
+
+    Args:
+        entity_type: Entity type (e.g., 'Laptop', 'Smartphone')
+
+    Returns:
+        Translation coverage report
+
+    Example:
+        GET /api/translation-coverage/Laptop
+    """
+    from .db.localization import get_localization_queries
+    from .db.connection import get_connection
+
+    try:
+        # Get localization queries instance
+        conn = get_connection()
+        localization = get_localization_queries(conn)
+
+        # Get coverage report
+        result = localization.get_translation_coverage(entity_type)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error getting translation coverage: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve translation coverage: {str(e)}"
+        )
+
 # Graph Visualization Routes
 
 @app.get("/graph", response_class=HTMLResponse)
