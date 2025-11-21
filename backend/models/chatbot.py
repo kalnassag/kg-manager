@@ -68,7 +68,7 @@ class ChatMessage(BaseModel):
         schema_extra = {
             "example": {
                 "role": "user",
-                "content": "What laptops do we have?",
+                "content": "Show me the available products",
                 "timestamp": "2025-01-21T10:30:00"
             }
         }
@@ -82,7 +82,7 @@ class ChatRequest(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "message": "What laptops do we have with more than 16GB RAM?",
+                "message": "Show me products matching my criteria",
                 "conversation_id": "conv_123"
             }
         }
@@ -99,8 +99,8 @@ class ChatResponse(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "message": "I found 5 laptops with more than 16GB RAM...",
-                "cypher_query": "MATCH (l:Laptop) WHERE l.ram_gb > 16 RETURN l",
+                "message": "I found the products matching your criteria...",
+                "cypher_query": "MATCH (n:Product) RETURN n LIMIT 50",
                 "query_results": [],
                 "conversation_id": "conv_123",
                 "timestamp": "2025-01-21T10:30:05"
