@@ -366,6 +366,256 @@ async def get_relationship_types():
         logger.error(f"Error fetching relationship types: {e}")
         return {'relationships': []}
 
+# Chatbot / GraphRAG API Endpoints
+
+@app.post("/api/chatbot/settings")
+async def save_chatbot_settings(request: Request):
+    """
+    Save LLM and prompt settings for the chatbot.
+
+    Request body should contain:
+    - llm_settings: LLM provider configuration
+    - prompt_config: System prompt configuration
+
+    Example:
+        POST /api/chatbot/settings
+        {
+            "llm_settings": {
+                "provider": "openai",
+                "api_key": "sk-...",
+                "model": "gpt-4",
+                "temperature": 0.1,
+                "max_tokens": 2000
+            },
+            "prompt_config": {
+                "custom_prompt": null,
+                "include_schema": true,
+                "include_examples": true
+            }
+        }
+    """
+    from .models.chatbot import SaveSettingsRequest
+    from .services.llm_service import get_llm_service
+
+    try:
+        data = await request.json()
+        settings_request = SaveSettingsRequest(**data)
+
+        # Initialize/update LLM service
+        service = get_llm_service(
+            settings=settings_request.llm_settings,
+            prompt_config=settings_request.prompt_config
+        )
+
+        if service is None:
+            raise HTTPException(status_code=500, detail="Failed to initialize LLM service")
+
+        return {
+            "success": True,
+            "message": "Chatbot settings saved successfully"
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error saving chatbot settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chatbot/chat")
+async def chat_with_graph(request: Request):
+    """
+    Send a message to the chatbot and get a response.
+
+    The chatbot will:
+    1. Convert the question to a Cypher query
+    2. Execute the query on the graph
+    3. Format the results as a natural language response
+
+    Request body should contain:
+    - message: User's question
+    - conversation_id: Optional conversation ID for multi-turn chat
+
+    Example:
+        POST /api/chatbot/chat
+        {
+            "message": "What laptops do we have with more than 16GB RAM?",
+            "conversation_id": "conv_123"
+        }
+    """
+    from .models.chatbot import ChatRequest, ChatResponse
+    from .services.llm_service import get_llm_service
+    from .db.discovery import get_discovery
+    from .db.connection import get_connection
+    from datetime import datetime
+    import uuid
+
+    try:
+        data = await request.json()
+        chat_request = ChatRequest(**data)
+
+        # Get LLM service
+        llm_service = get_llm_service()
+        if llm_service is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Chatbot not configured. Please configure LLM settings first."
+            )
+
+        # Get graph schema
+        discovery = get_discovery()
+        schema = discovery.get_all_schema_info()
+
+        # Generate Cypher query
+        cypher_query = await llm_service.generate_cypher(
+            question=chat_request.message,
+            graph_schema=schema
+        )
+
+        logger.info(f"Generated Cypher: {cypher_query}")
+
+        # Execute query
+        conn = get_connection()
+        try:
+            results = conn.execute_query(cypher_query)
+            # Convert results to dictionaries
+            results_list = [dict(record) for record in results]
+        except Exception as e:
+            logger.error(f"Error executing Cypher query: {e}")
+            # Return error message
+            return ChatResponse(
+                message=f"I encountered an error while querying the database: {str(e)}",
+                cypher_query=cypher_query,
+                query_results=[],
+                conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
+                timestamp=datetime.now()
+            )
+
+        # Format response
+        response_text = await llm_service.format_response(
+            question=chat_request.message,
+            cypher_query=cypher_query,
+            results=results_list
+        )
+
+        return ChatResponse(
+            message=response_text,
+            cypher_query=cypher_query,
+            query_results=results_list,
+            conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
+            timestamp=datetime.now()
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/chatbot/test-connection")
+async def test_llm_connection():
+    """
+    Test the LLM connection with a simple query.
+
+    Returns success if the LLM is configured and responding.
+    """
+    from .services.llm_service import get_llm_service
+    import traceback
+
+    try:
+        llm_service = get_llm_service()
+        if llm_service is None:
+            return {
+                "success": False,
+                "message": "Chatbot not configured. Please save LLM settings first."
+            }
+
+        # Test with a simple Cypher generation
+        test_schema = {
+            'labels': ['Test'],
+            'relationship_types': []
+        }
+
+        logger.info(f"Testing connection with provider: {llm_service.settings.provider.value}, model: {llm_service.settings.model}")
+
+        test_response = await llm_service.generate_cypher(
+            question="Show me all items",
+            graph_schema=test_schema
+        )
+
+        return {
+            "success": True,
+            "message": "LLM connection successful",
+            "provider": llm_service.settings.provider.value,
+            "model": llm_service.settings.model,
+            "test_response": test_response[:100]  # First 100 chars
+        }
+
+    except ValueError as e:
+        # Configuration errors (missing API key, etc.)
+        logger.error(f"Configuration error: {e}")
+        return {
+            "success": False,
+            "message": f"Configuration error: {str(e)}"
+        }
+    except Exception as e:
+        # Network or API errors
+        logger.error(f"Error testing LLM connection: {e}")
+        logger.error(traceback.format_exc())
+
+        # Try to extract more specific error info
+        error_msg = str(e)
+        if hasattr(e, 'response'):
+            try:
+                error_msg = f"{error_msg} (HTTP {e.response.status_code})"
+            except:
+                pass
+
+        return {
+            "success": False,
+            "message": f"Connection failed: {error_msg}"
+        }
+
+
+@app.get("/api/chatbot/models")
+async def get_available_models():
+    """
+    Get list of available models for each LLM provider.
+
+    Returns a dictionary mapping providers to their available models.
+    """
+    models = {
+        "openai": [
+            {"id": "gpt-4-turbo-preview", "name": "GPT-4 Turbo (Latest)", "description": "Most capable model, best for complex queries"},
+            {"id": "gpt-4", "name": "GPT-4", "description": "High capability, stable"},
+            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast and cost-effective"}
+        ],
+        "anthropic": [
+            {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "description": "Most capable Claude model"},
+            {"id": "claude-3-sonnet-20240229", "name": "Claude 3 Sonnet", "description": "Balanced performance and speed"},
+            {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku", "description": "Fastest, most cost-effective"}
+        ],
+        "google": [
+            {"id": "gemini-1.5-pro-latest", "name": "Gemini 1.5 Pro (Latest)", "description": "Most capable Gemini model"},
+            {"id": "gemini-pro", "name": "Gemini Pro", "description": "Balanced performance"}
+        ],
+        "ollama": [
+            {"id": "llama2", "name": "Llama 2", "description": "Meta's open-source model"},
+            {"id": "mistral", "name": "Mistral", "description": "High quality open-source model"},
+            {"id": "codellama", "name": "Code Llama", "description": "Specialized for code"},
+            {"id": "mixtral", "name": "Mixtral", "description": "Mixture of experts model"},
+            {"id": "llama2:13b", "name": "Llama 2 13B", "description": "Larger Llama 2 variant"},
+            {"id": "phi", "name": "Phi", "description": "Microsoft's small language model"}
+        ]
+    }
+
+    return {
+        "models": models,
+        "last_updated": "2024-03-01"
+    }
+
+
 # Multilingual / Localization API Endpoints
 
 @app.get("/api/locales")
@@ -1611,256 +1861,6 @@ async def schema_discover_page(request: Request):
     return templates.TemplateResponse("schema_discover.html", {
         "request": request
     })
-
-
-# Chatbot / GraphRAG API Endpoints
-
-@app.post("/api/chatbot/settings")
-async def save_chatbot_settings(request: Request):
-    """
-    Save LLM and prompt settings for the chatbot.
-
-    Request body should contain:
-    - llm_settings: LLM provider configuration
-    - prompt_config: System prompt configuration
-
-    Example:
-        POST /api/chatbot/settings
-        {
-            "llm_settings": {
-                "provider": "openai",
-                "api_key": "sk-...",
-                "model": "gpt-4",
-                "temperature": 0.1,
-                "max_tokens": 2000
-            },
-            "prompt_config": {
-                "custom_prompt": null,
-                "include_schema": true,
-                "include_examples": true
-            }
-        }
-    """
-    from .models.chatbot import SaveSettingsRequest
-    from .services.llm_service import get_llm_service
-
-    try:
-        data = await request.json()
-        settings_request = SaveSettingsRequest(**data)
-
-        # Initialize/update LLM service
-        service = get_llm_service(
-            settings=settings_request.llm_settings,
-            prompt_config=settings_request.prompt_config
-        )
-
-        if service is None:
-            raise HTTPException(status_code=500, detail="Failed to initialize LLM service")
-
-        return {
-            "success": True,
-            "message": "Chatbot settings saved successfully"
-        }
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error saving chatbot settings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/chatbot/chat")
-async def chat_with_graph(request: Request):
-    """
-    Send a message to the chatbot and get a response.
-
-    The chatbot will:
-    1. Convert the question to a Cypher query
-    2. Execute the query on the graph
-    3. Format the results as a natural language response
-
-    Request body should contain:
-    - message: User's question
-    - conversation_id: Optional conversation ID for multi-turn chat
-
-    Example:
-        POST /api/chatbot/chat
-        {
-            "message": "What laptops do we have with more than 16GB RAM?",
-            "conversation_id": "conv_123"
-        }
-    """
-    from .models.chatbot import ChatRequest, ChatResponse
-    from .services.llm_service import get_llm_service
-    from .db.discovery import get_discovery
-    from .db.connection import get_connection
-    from datetime import datetime
-    import uuid
-
-    try:
-        data = await request.json()
-        chat_request = ChatRequest(**data)
-
-        # Get LLM service
-        llm_service = get_llm_service()
-        if llm_service is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Chatbot not configured. Please configure LLM settings first."
-            )
-
-        # Get graph schema
-        discovery = get_discovery()
-        schema = discovery.get_all_schema_info()
-
-        # Generate Cypher query
-        cypher_query = await llm_service.generate_cypher(
-            question=chat_request.message,
-            graph_schema=schema
-        )
-
-        logger.info(f"Generated Cypher: {cypher_query}")
-
-        # Execute query
-        conn = get_connection()
-        try:
-            results = conn.execute_query(cypher_query)
-            # Convert results to dictionaries
-            results_list = [dict(record) for record in results]
-        except Exception as e:
-            logger.error(f"Error executing Cypher query: {e}")
-            # Return error message
-            return ChatResponse(
-                message=f"I encountered an error while querying the database: {str(e)}",
-                cypher_query=cypher_query,
-                query_results=[],
-                conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
-                timestamp=datetime.now()
-            )
-
-        # Format response
-        response_text = await llm_service.format_response(
-            question=chat_request.message,
-            cypher_query=cypher_query,
-            results=results_list
-        )
-
-        return ChatResponse(
-            message=response_text,
-            cypher_query=cypher_query,
-            query_results=results_list,
-            conversation_id=chat_request.conversation_id or str(uuid.uuid4()),
-            timestamp=datetime.now()
-        )
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/chatbot/test-connection")
-async def test_llm_connection():
-    """
-    Test the LLM connection with a simple query.
-
-    Returns success if the LLM is configured and responding.
-    """
-    from .services.llm_service import get_llm_service
-    import traceback
-
-    try:
-        llm_service = get_llm_service()
-        if llm_service is None:
-            return {
-                "success": False,
-                "message": "Chatbot not configured. Please save LLM settings first."
-            }
-
-        # Test with a simple Cypher generation
-        test_schema = {
-            'labels': ['Test'],
-            'relationship_types': []
-        }
-
-        logger.info(f"Testing connection with provider: {llm_service.settings.provider.value}, model: {llm_service.settings.model}")
-
-        test_response = await llm_service.generate_cypher(
-            question="Show me all items",
-            graph_schema=test_schema
-        )
-
-        return {
-            "success": True,
-            "message": "LLM connection successful",
-            "provider": llm_service.settings.provider.value,
-            "model": llm_service.settings.model,
-            "test_response": test_response[:100]  # First 100 chars
-        }
-
-    except ValueError as e:
-        # Configuration errors (missing API key, etc.)
-        logger.error(f"Configuration error: {e}")
-        return {
-            "success": False,
-            "message": f"Configuration error: {str(e)}"
-        }
-    except Exception as e:
-        # Network or API errors
-        logger.error(f"Error testing LLM connection: {e}")
-        logger.error(traceback.format_exc())
-
-        # Try to extract more specific error info
-        error_msg = str(e)
-        if hasattr(e, 'response'):
-            try:
-                error_msg = f"{error_msg} (HTTP {e.response.status_code})"
-            except:
-                pass
-
-        return {
-            "success": False,
-            "message": f"Connection failed: {error_msg}"
-        }
-
-
-@app.get("/api/chatbot/models")
-async def get_available_models():
-    """
-    Get list of available models for each LLM provider.
-
-    Returns a dictionary mapping providers to their available models.
-    """
-    models = {
-        "openai": [
-            {"id": "gpt-4-turbo-preview", "name": "GPT-4 Turbo (Latest)", "description": "Most capable model, best for complex queries"},
-            {"id": "gpt-4", "name": "GPT-4", "description": "High capability, stable"},
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast and cost-effective"}
-        ],
-        "anthropic": [
-            {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "description": "Most capable Claude model"},
-            {"id": "claude-3-sonnet-20240229", "name": "Claude 3 Sonnet", "description": "Balanced performance and speed"},
-            {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku", "description": "Fastest, most cost-effective"}
-        ],
-        "google": [
-            {"id": "gemini-1.5-pro-latest", "name": "Gemini 1.5 Pro (Latest)", "description": "Most capable Gemini model"},
-            {"id": "gemini-pro", "name": "Gemini Pro", "description": "Balanced performance"}
-        ],
-        "ollama": [
-            {"id": "llama2", "name": "Llama 2", "description": "Meta's open-source model"},
-            {"id": "mistral", "name": "Mistral", "description": "High quality open-source model"},
-            {"id": "codellama", "name": "Code Llama", "description": "Specialized for code"},
-            {"id": "mixtral", "name": "Mixtral", "description": "Mixture of experts model"},
-            {"id": "llama2:13b", "name": "Llama 2 13B", "description": "Larger Llama 2 variant"},
-            {"id": "phi", "name": "Phi", "description": "Microsoft's small language model"}
-        ]
-    }
-
-    return {
-        "models": models,
-        "last_updated": "2024-03-01"
-    }
 
 
 @app.get("/chatbot", response_class=HTMLResponse)
