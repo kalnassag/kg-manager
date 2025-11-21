@@ -10,7 +10,8 @@
     "patterns": "Muster",
     "schema": "Schema",
     "search_placeholder": "Suchen...",
-    "search_button": "Suchen"
+    "search_button": "Suchen",
+    "chatbot": "Chatbot"
   },
   "dashboard": {
     "title": "Wissens-Graph Dashboard",

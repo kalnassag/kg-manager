@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}Graph Chatbot - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="chatbot-container">
+    <div class="chatbot-header">
+        <h1 class="page-title">Graph Chatbot</h1>
+        <p class="page-subtitle">Ask questions about your knowledge graph in natural language</p>
+        <button class="btn btn-secondary" id="settings-toggle">⚙️ Settings</button>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settings-panel" style="display: none;">
+        <div class="settings-header">
+            <h2>Chatbot Settings</h2>
+            <button class="btn-close" id="settings-close">&times;</button>
+        </div>
+
+        <form id="settings-form">
+            <div class="settings-section">
+                <h3>LLM Provider</h3>
+
+                <div class="form-group">
+                    <label for="provider">Provider</label>
+                    <select id="provider" name="provider" required>
+                        <option value="openai">OpenAI (GPT-4, GPT-3.5)</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="google">Google (Gemini)</option>
+                        <option value="ollama">Ollama (Local)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="api-key">API Key</label>
+                    <input type="password" id="api-key" name="api_key" placeholder="sk-...">
+                    <small>Leave empty to use environment variable</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="model">Model</label>
+                    <input type="text" id="model" name="model" value="gpt-4" required>
+                    <small id="model-hint">Examples: gpt-4, gpt-3.5-turbo, claude-3-sonnet-20240229</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="temperature">Temperature</label>
+                        <input type="number" id="temperature" name="temperature" value="0.1" min="0" max="2" step="0.1">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="max-tokens">Max Tokens</label>
+                        <input type="number" id="max-tokens" name="max_tokens" value="2000" min="100" max="128000">
+                    </div>
+                </div>
+
+                <div class="form-group" id="base-url-group" style="display: none;">
+                    <label for="base-url">Base URL (Ollama)</label>
+                    <input type="text" id="base-url" name="base_url" placeholder="http://localhost:11434">
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>System Prompt</h3>
+
+                <div class="form-group">
+                    <label for="custom-prompt">Custom System Prompt (Optional)</label>
+                    <textarea id="custom-prompt" name="custom_prompt" rows="4" placeholder="Override the default system prompt..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="include-schema" name="include_schema" checked>
+                        Include graph schema in prompt
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="include-examples" name="include_examples" checked>
+                        Include example queries in prompt
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="button" class="btn btn-secondary" id="test-connection-btn">Test Connection</button>
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+        </form>
+
+        <div id="test-result" class="test-result" style="display: none;"></div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div class="chat-interface">
+        <div class="chat-messages" id="chat-messages">
+            <div class="welcome-message">
+                <div class="welcome-icon">🤖</div>
+                <h2>Welcome to the Graph Chatbot!</h2>
+                <p>Ask me questions about your knowledge graph in natural language.</p>
+                <div class="example-questions">
+                    <p><strong>Example questions:</strong></p>
+                    <ul>
+                        <li>"What laptops do we have?"</li>
+                        <li>"Find smartphones with more than 128GB storage"</li>
+                        <li>"What brands do we carry?"</li>
+                        <li>"Show me products from Apple"</li>
+                    </ul>
+                </div>
+                <p class="config-notice">💡 Configure your LLM settings above to get started</p>
+            </div>
+        </div>
+
+        <form class="chat-input-form" id="chat-form">
+            <input
+                type="text"
+                id="chat-input"
+                placeholder="Ask a question about your graph..."
+                autocomplete="off"
+                disabled
+            >
+            <button type="submit" id="send-btn" disabled>
+                <span id="send-icon">➤</span>
+                <span id="loading-icon" style="display: none;">⋯</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+let conversationId = null;
+let isConfigured = false;
+
+// Provider model hints
+const modelHints = {
+    'openai': 'Examples: gpt-4, gpt-4-turbo, gpt-3.5-turbo',
+    'anthropic': 'Examples: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307',
+    'google': 'Examples: gemini-pro, gemini-1.5-pro',
+    'ollama': 'Examples: llama2, mistral, codellama'
+};
+
+// Settings panel toggle
+document.getElementById('settings-toggle').addEventListener('click', () => {
+    document.getElementById('settings-panel').style.display = 'block';
+});
+
+document.getElementById('settings-close').addEventListener('click', () => {
+    document.getElementById('settings-panel').style.display = 'none';
+});
+
+// Provider change handler
+document.getElementById('provider').addEventListener('change', (e) => {
+    const provider = e.target.value;
+    document.getElementById('model-hint').textContent = modelHints[provider];
+
+    // Show base URL for Ollama
+    if (provider === 'ollama') {
+        document.getElementById('base-url-group').style.display = 'block';
+        document.getElementById('api-key').required = false;
+    } else {
+        document.getElementById('base-url-group').style.display = 'none';
+        document.getElementById('api-key').required = false; // Optional for all
+    }
+});
+
+// Save settings
+document.getElementById('settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+
+    const settings = {
+        llm_settings: {
+            provider: formData.get('provider'),
+            api_key: formData.get('api_key') || null,
+            model: formData.get('model'),
+            temperature: parseFloat(formData.get('temperature')),
+            max_tokens: parseInt(formData.get('max_tokens')),
+            base_url: formData.get('base_url') || null
+        },
+        prompt_config: {
+            custom_prompt: formData.get('custom_prompt') || null,
+            include_schema: document.getElementById('include-schema').checked,
+            include_examples: document.getElementById('include-examples').checked
+        }
+    };
+
+    try {
+        const response = await fetch('/api/chatbot/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save settings');
+        }
+
+        isConfigured = true;
+        document.getElementById('chat-input').disabled = false;
+        document.getElementById('send-btn').disabled = false;
+
+        // Update welcome message
+        const welcomeNotice = document.querySelector('.config-notice');
+        if (welcomeNotice) {
+            welcomeNotice.textContent = '✅ Chatbot configured and ready!';
+            welcomeNotice.style.color = '#155724';
+        }
+
+        alert('Settings saved successfully!');
+        document.getElementById('settings-panel').style.display = 'none';
+
+    } catch (error) {
+        alert('Error saving settings: ' + error.message);
+    }
+});
+
+// Test connection
+document.getElementById('test-connection-btn').addEventListener('click', async () => {
+    const resultDiv = document.getElementById('test-result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="loading">Testing connection...</div>';
+
+    try {
+        const response = await fetch('/api/chatbot/test-connection');
+        const data = await response.json();
+
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="test-success">
+                    <strong>✓ Connection successful!</strong><br>
+                    Provider: ${data.provider}<br>
+                    Model: ${data.model}<br>
+                    Response: ${data.test_response}
+                </div>
+            `;
+        } else {
+            throw new Error(data.message || 'Connection failed');
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="test-error">
+                <strong>✗ Connection failed</strong><br>
+                ${error.message}
+            </div>
+        `;
+    }
+});
+
+// Chat form submission
+document.getElementById('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // Disable input while processing
+    input.disabled = true;
+    document.getElementById('send-btn').disabled = true;
+    document.getElementById('send-icon').style.display = 'none';
+    document.getElementById('loading-icon').style.display = 'inline';
+
+    // Add user message to chat
+    addMessage('user', message);
+    input.value = '';
+
+    try {
+        const response = await fetch('/api/chatbot/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                conversation_id: conversationId
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to get response');
+        }
+
+        const data = await response.json();
+
+        // Update conversation ID
+        conversationId = data.conversation_id;
+
+        // Add assistant message
+        addMessage('assistant', data.message, data.cypher_query, data.query_results);
+
+    } catch (error) {
+        addMessage('assistant', `Error: ${error.message}`);
+    } finally {
+        input.disabled = false;
+        document.getElementById('send-btn').disabled = false;
+        document.getElementById('send-icon').style.display = 'inline';
+        document.getElementById('loading-icon').style.display = 'none';
+        input.focus();
+    }
+});
+
+function addMessage(role, content, cypherQuery = null, results = null) {
+    const messagesContainer = document.getElementById('chat-messages');
+
+    // Remove welcome message on first interaction
+    const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+    if (welcomeMessage) {
+        welcomeMessage.remove();
+    }
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${role}-message`;
+
+    let messageHTML = `
+        <div class="message-content">${escapeHtml(content)}</div>
+    `;
+
+    if (cypherQuery) {
+        messageHTML += `
+            <div class="cypher-query">
+                <div class="cypher-header">
+                    <strong>Generated Cypher Query:</strong>
+                    <button class="copy-btn" onclick="copyCypher(this)" data-query="${escapeHtml(cypherQuery)}">Copy</button>
+                </div>
+                <pre><code>${escapeHtml(cypherQuery)}</code></pre>
+            </div>
+        `;
+    }
+
+    if (results && results.length > 0) {
+        const resultsPreview = results.slice(0, 5);
+        messageHTML += `
+            <div class="query-results">
+                <strong>Results (${results.length} total):</strong>
+                <div class="results-preview">
+                    <pre><code>${escapeHtml(JSON.stringify(resultsPreview, null, 2))}</code></pre>
+                </div>
+            </div>
+        `;
+    }
+
+    messageDiv.innerHTML = messageHTML;
+    messagesContainer.appendChild(messageDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function copyCypher(button) {
+    const query = button.getAttribute('data-query');
+    navigator.clipboard.writeText(query);
+    button.textContent = 'Copied!';
+    setTimeout(() => {
+        button.textContent = 'Copy';
+    }, 2000);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

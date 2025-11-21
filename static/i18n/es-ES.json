@@ -10,7 +10,8 @@
     "patterns": "Patrones",
     "schema": "Esquema",
     "search_placeholder": "Buscar...",
-    "search_button": "Buscar"
+    "search_button": "Buscar",
+    "chatbot": "Chatbot"
   },
   "dashboard": {
     "title": "Panel de Control del Grafo de Conocimiento",

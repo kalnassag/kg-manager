@@ -10,7 +10,8 @@
     "patterns": "Modèles",
     "schema": "Schéma",
     "search_placeholder": "Rechercher...",
-    "search_button": "Rechercher"
+    "search_button": "Rechercher",
+    "chatbot": "Chatbot"
   },
   "dashboard": {
     "title": "Tableau de Bord du Graphe de Connaissances",
