@@ -474,24 +474,25 @@ async def chat_with_graph(request: Request):
 
         logger.info(f"Generated Cypher: {cypher_query}")
 
-        # Execute query - Get fresh connection and verify connectivity
+        # Execute query - Ensure fresh connection
         try:
-            conn = get_connection()
-            # Verify connection is still alive, reconnect if needed
-            try:
-                conn._driver.verify_connectivity()
-            except:
-                # Reconnect if connection is stale
-                logger.info("Neo4j connection stale, reconnecting...")
-                from .db.connection import close_connection, initialize_connection
-                close_connection()
-                initialize_connection(
-                    config.neo4j_uri,
-                    config.neo4j_user,
-                    config.neo4j_password
-                )
-                conn = get_connection()
+            # Close and reinitialize connection before each query to avoid stale connections
+            # This is necessary because LLM calls can take 10-30 seconds, causing the connection to timeout
+            from .db.connection import close_connection, initialize_connection
 
+            try:
+                close_connection()
+            except:
+                pass  # Ignore errors when closing (connection might already be closed)
+
+            # Create fresh connection
+            initialize_connection(
+                config.neo4j_uri,
+                config.neo4j_user,
+                config.neo4j_password
+            )
+
+            conn = get_connection()
             results = conn.execute_query(cypher_query)
             # Convert results to dictionaries
             results_list = [dict(record) for record in results]
