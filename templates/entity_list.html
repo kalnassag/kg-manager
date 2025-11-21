@@ -7,12 +7,12 @@
     <!-- Header -->
     <div class="page-header">
         <div class="page-header-left">
-            <a href="/" class="back-link">&larr; Back to Dashboard</a>
+            <a href="/" class="back-link" data-i18n="entity_list.back_to_dashboard">&larr; Back to Dashboard</a>
             <h1 class="page-title">{{ label_human }}</h1>
-            <span class="entity-count-badge">{{ total }} items</span>
+            <span class="entity-count-badge">{{ total}} <span data-i18n="dashboard.items">items</span></span>
         </div>
         <div class="page-header-right">
-            <a href="/entities/{{ label }}/new" class="btn btn-primary">+ Create New</a>
+            <a href="/entities/{{ label }}/new" class="btn btn-primary" data-i18n="entity_list.create_new">+ Create New</a>
         </div>
     </div>
 
@@ -21,10 +21,10 @@
         <div class="toolbar-left">
             <!-- Search -->
             <form method="get" class="search-form inline">
-                <input type="text" name="search" value="{{ search }}" placeholder="Search..." class="search-input">
-                <button type="submit" class="btn btn-secondary">Search</button>
+                <input type="text" name="search" value="{{ search }}" placeholder="Search..." class="search-input" data-i18n-placeholder="entity_list.search_placeholder">
+                <button type="submit" class="btn btn-secondary" data-i18n="entity_list.search_button">Search</button>
                 {% if search %}
-                <a href="/entities/{{ label }}" class="btn btn-secondary">Clear</a>
+                <a href="/entities/{{ label }}" class="btn btn-secondary" data-i18n="entity_list.clear">Clear</a>
                 {% endif %}
             </form>
         </div>
@@ -32,11 +32,13 @@
             <!-- View Toggle -->
             <div class="view-toggle">
                 <a href="?view=list{% if search %}&search={{ search }}{% endif %}"
-                   class="view-btn {% if view_mode == 'list' %}active{% endif %}">
+                   class="view-btn {% if view_mode == 'list' %}active{% endif %}"
+                   data-i18n="entity_list.list_view">
                     List View
                 </a>
                 <a href="?view=table{% if search %}&search={{ search }}{% endif %}"
-                   class="view-btn {% if view_mode == 'table' %}active{% endif %}">
+                   class="view-btn {% if view_mode == 'table' %}active{% endif %}"
+                   data-i18n="entity_list.table_view">
                     Table View
                 </a>
             </div>
@@ -80,7 +82,7 @@
                             <th>{{ humanize_property_name(prop) }}</th>
                             {% endif %}
                         {% endfor %}
-                        <th>Actions</th>
+                        <th data-i18n="entity_list.actions">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,7 +100,7 @@
                             {% endif %}
                         {% endfor %}
                         <td>
-                            <a href="/entities/{{ label }}/{{ entity_id_val }}/edit" class="btn-small">Edit</a>
+                            <a href="/entities/{{ label }}/{{ entity_id_val }}/edit" class="btn-small" data-i18n="entity_list.edit">Edit</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -112,22 +114,22 @@
         <div class="pagination">
             {% if page > 1 %}
             <a href="?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if view_mode %}&view={{ view_mode }}{% endif %}"
-               class="pagination-btn">← Previous</a>
+               class="pagination-btn" data-i18n="entity_list.previous">← Previous</a>
             {% endif %}
 
-            <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
+            <span class="pagination-info"><span data-i18n="entity_list.page_of" data-i18n-vars='{"page": {{ page }}, "total": {{ total_pages }}}'>Page {{ page }} of {{ total_pages }}</span></span>
 
             {% if page < total_pages %}
             <a href="?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if view_mode %}&view={{ view_mode }}{% endif %}"
-               class="pagination-btn">Next →</a>
+               class="pagination-btn" data-i18n="entity_list.next">Next →</a>
             {% endif %}
         </div>
         {% endif %}
     {% else %}
         <div class="empty-state">
-            <p>No {{ label_human }} found.</p>
+            <p><span data-i18n="entity_list.no_items_found" data-i18n-vars='{"label": "{{ label_human }}"}'>No {{ label_human }} found.</span></p>
             {% if search %}
-            <p><a href="/entities/{{ label }}">Clear search</a> to see all items.</p>
+            <p><a href="/entities/{{ label }}" data-i18n="entity_list.clear_search">Clear search</a> <span data-i18n="entity_list.to_see_all">to see all items.</span></p>
             {% endif %}
         </div>
     {% endif %}

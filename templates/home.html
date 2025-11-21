@@ -4,41 +4,41 @@
 
 {% block content %}
 <div class="dashboard">
-    <h1 class="page-title">Knowledge Graph Dashboard</h1>
+    <h1 class="page-title" data-i18n="dashboard.title">Knowledge Graph Dashboard</h1>
 
     <!-- Statistics -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-number">{{ schema.labels|length }}</div>
-            <div class="stat-label">Total Entity Types</div>
+            <div class="stat-label" data-i18n="dashboard.total_entity_types">Total Entity Types</div>
         </div>
         <div class="stat-card">
             <div class="stat-number">{{ schema.product_types|length }}</div>
-            <div class="stat-label">Product Types</div>
+            <div class="stat-label" data-i18n="dashboard.product_types">Product Types</div>
         </div>
         <div class="stat-card">
             <div class="stat-number">{{ schema.supporting_entities|length }}</div>
-            <div class="stat-label">Supporting Entities</div>
+            <div class="stat-label" data-i18n="dashboard.supporting_entities">Supporting Entities</div>
         </div>
         <div class="stat-card">
             <div class="stat-number">{{ schema.counts.values()|sum }}</div>
-            <div class="stat-label">Total Entities</div>
+            <div class="stat-label" data-i18n="dashboard.total_entities">Total Entities</div>
         </div>
     </div>
 
     <!-- Product Types Section -->
     {% if schema.product_types %}
     <section class="entity-section">
-        <h2 class="section-title">Product Types</h2>
+        <h2 class="section-title" data-i18n="dashboard.product_types">Product Types</h2>
         <div class="entity-grid">
             {% for label in schema.product_types %}
             <a href="/entities/{{ label }}" class="entity-card">
                 <div class="entity-card-header">
                     <h3 class="entity-card-title">{{ humanize_label(label) }}</h3>
-                    <span class="entity-badge product-badge">Product</span>
+                    <span class="entity-badge product-badge" data-i18n="dashboard.product_badge">Product</span>
                 </div>
                 <div class="entity-card-body">
-                    <div class="entity-count">{{ schema.counts.get(label, 0) }} items</div>
+                    <div class="entity-count">{{ schema.counts.get(label, 0) }} <span data-i18n="dashboard.items">items</span></div>
                 </div>
             </a>
             {% endfor %}
@@ -49,16 +49,16 @@
     <!-- Supporting Entities Section -->
     {% if schema.supporting_entities %}
     <section class="entity-section">
-        <h2 class="section-title">Supporting Entities</h2>
+        <h2 class="section-title" data-i18n="dashboard.supporting_entities">Supporting Entities</h2>
         <div class="entity-grid">
             {% for label in schema.supporting_entities %}
             <a href="/entities/{{ label }}" class="entity-card">
                 <div class="entity-card-header">
                     <h3 class="entity-card-title">{{ humanize_label(label) }}</h3>
-                    <span class="entity-badge supporting-badge">Supporting</span>
+                    <span class="entity-badge supporting-badge" data-i18n="dashboard.supporting_badge">Supporting</span>
                 </div>
                 <div class="entity-card-body">
-                    <div class="entity-count">{{ schema.counts.get(label, 0) }} items</div>
+                    <div class="entity-count">{{ schema.counts.get(label, 0) }} <span data-i18n="dashboard.items">items</span></div>
                 </div>
             </a>
             {% endfor %}
