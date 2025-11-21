@@ -1205,3 +1205,235 @@ input[type="checkbox"] {
         margin: 1rem;
     }
 }
+
+/* ========================================
+   Language Selector Styles
+   ======================================== */
+
+.language-selector {
+    position: relative;
+    display: inline-block;
+}
+
+.language-selector-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dark);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.language-selector-btn:hover {
+    background: var(--secondary-blue);
+    border-color: var(--primary-blue-light);
+}
+
+.language-selector-btn:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.language-icon {
+    color: var(--text-medium);
+}
+
+.current-locale-code {
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-dark);
+}
+
+.dropdown-arrow {
+    color: var(--text-light);
+    transition: transform 0.2s ease;
+}
+
+.language-selector-btn:hover .dropdown-arrow {
+    color: var(--text-medium);
+}
+
+.language-dropdown {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+    min-width: 220px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.2s ease;
+}
+
+.language-dropdown.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.language-dropdown-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-medium);
+    letter-spacing: 0.5px;
+}
+
+.language-list {
+    padding: 0.5rem 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.language-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    gap: 0.75rem;
+}
+
+.language-item:hover {
+    background-color: var(--secondary-blue);
+}
+
+.language-item.active {
+    background-color: var(--secondary-blue);
+}
+
+.language-item:focus {
+    outline: none;
+    background-color: var(--secondary-blue);
+}
+
+.language-name {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-dark);
+    font-weight: 500;
+}
+
+.language-code {
+    font-size: 11px;
+    color: var(--text-light);
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    background: var(--border-light);
+    border-radius: 4px;
+}
+
+.language-item.active .language-code {
+    background: var(--primary-blue);
+    color: var(--white);
+}
+
+.language-checkmark {
+    color: var(--primary-blue);
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* RTL Support */
+[dir="rtl"] .language-selector {
+    direction: rtl;
+}
+
+[dir="rtl"] .language-dropdown {
+    right: auto;
+    left: 0;
+}
+
+[dir="rtl"] .language-item {
+    direction: rtl;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .language-selector-btn {
+        padding: 0.4rem 0.6rem;
+        gap: 0.35rem;
+    }
+
+    .language-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .current-locale-code {
+        font-size: 11px;
+    }
+
+    .language-dropdown {
+        min-width: 180px;
+        right: -1rem;
+    }
+
+    [dir="rtl"] .language-dropdown {
+        right: auto;
+        left: -1rem;
+    }
+
+    .language-name {
+        font-size: 13px;
+    }
+
+    .language-code {
+        font-size: 10px;
+        padding: 0.2rem 0.4rem;
+    }
+}
+
+/* Animation for locale change */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.locale-changed {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Scrollbar styling for language list */
+.language-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.language-list::-webkit-scrollbar-track {
+    background: var(--border-light);
+    border-radius: 3px;
+}
+
+.language-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+.language-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+}

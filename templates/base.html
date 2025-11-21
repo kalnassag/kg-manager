@@ -1,27 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Product Knowledge Graph Manager{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/i18n.js" defer></script>
+    <script src="/static/js/language-selector.js" defer></script>
     <script src="/static/js/app.js" defer></script>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="/" class="nav-brand">Product Knowledge Graph</a>
+            <a href="/" class="nav-brand" data-i18n="app.brand">Product Knowledge Graph</a>
             <div class="nav-search">
                 <form action="/search" method="get" class="search-form">
-                    <input type="text" name="q" placeholder="Search..." class="search-input">
-                    <button type="submit" class="search-btn">Search</button>
+                    <input type="text" name="q" placeholder="Search..." class="search-input" data-i18n-placeholder="nav.search_placeholder">
+                    <button type="submit" class="search-btn" data-i18n="nav.search_button">Search</button>
                 </form>
             </div>
             <div class="nav-links">
-                <a href="/" class="nav-link">Home</a>
-                <a href="/graph" class="nav-link">Graph</a>
-                <a href="/patterns" class="nav-link">Patterns</a>
+                <a href="/" class="nav-link" data-i18n="nav.home">Home</a>
+                <a href="/graph" class="nav-link" data-i18n="nav.graph">Graph</a>
+                <a href="/patterns" class="nav-link" data-i18n="nav.patterns">Patterns</a>
+                <div id="language-selector"></div>
             </div>
         </div>
     </nav>
@@ -32,7 +35,7 @@
 
     <footer class="footer">
         <div class="footer-container">
-            <p>&copy; 2025 Product Knowledge Graph Manager</p>
+            <p data-i18n="app.copyright">&copy; 2025 Product Knowledge Graph Manager</p>
         </div>
     </footer>
 </body>
