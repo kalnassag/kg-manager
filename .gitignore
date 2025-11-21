@@ -37,6 +37,7 @@ env/
 
 # Configuration
 config.yaml
+chatbot_settings.json
 
 # Logs
 *.log
