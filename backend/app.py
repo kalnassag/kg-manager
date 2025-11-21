@@ -474,14 +474,31 @@ async def chat_with_graph(request: Request):
 
         logger.info(f"Generated Cypher: {cypher_query}")
 
-        # Execute query
-        conn = get_connection()
+        # Execute query - Get fresh connection and verify connectivity
         try:
+            conn = get_connection()
+            # Verify connection is still alive, reconnect if needed
+            try:
+                conn._driver.verify_connectivity()
+            except:
+                # Reconnect if connection is stale
+                logger.info("Neo4j connection stale, reconnecting...")
+                from .db.connection import close_connection, initialize_connection
+                close_connection()
+                initialize_connection(
+                    config.neo4j_uri,
+                    config.neo4j_user,
+                    config.neo4j_password
+                )
+                conn = get_connection()
+
             results = conn.execute_query(cypher_query)
             # Convert results to dictionaries
             results_list = [dict(record) for record in results]
         except Exception as e:
             logger.error(f"Error executing Cypher query: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             # Return error message
             return ChatResponse(
                 message=f"I encountered an error while querying the database: {str(e)}",
