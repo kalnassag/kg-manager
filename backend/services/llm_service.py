@@ -81,17 +81,23 @@ CRITICAL RULES:
             product_types = graph_schema.get('product_types', [])
             key_entities = [e for e in product_types if e in key_entity_types][:5]  # Top 5 product types
 
+            logger.info(f"Building schema section - Product types: {product_types}")
+            logger.info(f"Properties available for: {list(properties.keys())}")
+
             if key_entities:
                 properties_section = "\n\n### Available Properties by Entity Type:\n"
                 for entity in key_entities:
                     props = properties.get(entity, [])
                     if props:
+                        logger.info(f"{entity} has {len(props)} properties: {props[:10]}...")
                         # Show first 20 properties to avoid overwhelming the prompt
                         displayed_props = props[:20]
                         props_list = ', '.join(displayed_props)
                         if len(props) > 20:
                             props_list += f", ... ({len(props) - 20} more)"
                         properties_section += f"\n**{entity}**: {props_list}"
+            else:
+                logger.warning("No key entities found - properties section will be empty!")
 
             schema_section = f"""
 
@@ -109,6 +115,11 @@ CRITICAL RULES:
 2. DO NOT guess or assume property names - if not listed above, ask for clarification
 3. ALL property names must match EXACTLY (case-sensitive)
 4. Common properties: _id (unique identifier), name (entity name)"""
+
+            # Log the full schema section being sent to LLM
+            logger.info("=== SCHEMA SECTION SENT TO LLM ===")
+            logger.info(schema_section)
+            logger.info("=== END SCHEMA SECTION ===")
 
         examples_section = ""
         if self.prompt_config.include_examples:

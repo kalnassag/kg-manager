@@ -1,9 +1,14 @@
 """Discovery system for Neo4j graph schema."""
 from typing import Dict, List, Set, Tuple
+from pathlib import Path
+import json
 from .connection import get_connection
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Cache file for schema
+SCHEMA_CACHE_FILE = Path(__file__).parent.parent.parent / "graph_schema_cache.json"
 
 class SchemaDiscovery:
     """Discovers and analyzes Neo4j graph schema."""
@@ -215,6 +220,14 @@ class SchemaDiscovery:
 
     def get_all_schema_info(self) -> Dict:
         """Get comprehensive schema information."""
+        # Try to load from cache first
+        cached_schema = self._load_schema_cache()
+        if cached_schema:
+            logger.info("Using cached graph schema")
+            return cached_schema
+
+        # Discover fresh schema
+        logger.info("Discovering fresh graph schema...")
         labels = self.discover_node_labels()
         products, supporting = self.categorize_labels(labels)
         relationships = self.discover_relationships()
@@ -235,7 +248,53 @@ class SchemaDiscovery:
             'counts': {label: self.get_node_count(label) for label in labels}
         }
 
+        # Save to cache
+        self._save_schema_cache(schema)
+
         return schema
+
+    def _save_schema_cache(self, schema: Dict) -> None:
+        """Save schema to cache file."""
+        try:
+            with open(SCHEMA_CACHE_FILE, 'w') as f:
+                json.dump(schema, f, indent=2)
+            logger.info(f"Saved schema cache to {SCHEMA_CACHE_FILE}")
+        except Exception as e:
+            logger.error(f"Failed to save schema cache: {e}")
+
+    def _load_schema_cache(self) -> Dict:
+        """Load schema from cache file if it exists and is recent."""
+        try:
+            if not SCHEMA_CACHE_FILE.exists():
+                return None
+
+            # Check if cache is less than 1 hour old
+            import time
+            file_age = time.time() - SCHEMA_CACHE_FILE.stat().st_mtime
+            if file_age > 3600:  # 1 hour
+                logger.info("Schema cache is stale (>1 hour old), will refresh")
+                return None
+
+            with open(SCHEMA_CACHE_FILE, 'r') as f:
+                schema = json.load(f)
+
+            logger.info(f"Loaded schema cache from {SCHEMA_CACHE_FILE}")
+            return schema
+
+        except Exception as e:
+            logger.error(f"Failed to load schema cache: {e}")
+            return None
+
+    def refresh_schema_cache(self) -> Dict:
+        """Force refresh of schema cache."""
+        logger.info("Force refreshing schema cache...")
+
+        # Delete old cache
+        if SCHEMA_CACHE_FILE.exists():
+            SCHEMA_CACHE_FILE.unlink()
+
+        # Return fresh schema (which will be cached)
+        return self.get_all_schema_info()
 
 # Global discovery instance
 _discovery: SchemaDiscovery = None

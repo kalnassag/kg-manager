@@ -637,6 +637,37 @@ async def get_chatbot_settings():
         return {"configured": False, "settings": None}
 
 
+@app.post("/api/chatbot/refresh-schema")
+async def refresh_chatbot_schema():
+    """
+    Refresh the graph schema cache used by the chatbot.
+
+    Useful when the graph structure has changed and you want the chatbot
+    to pick up new properties, labels, or relationships.
+
+    Returns:
+        Updated schema information
+    """
+    from .db.discovery import get_discovery
+
+    try:
+        discovery = get_discovery()
+        schema = discovery.refresh_schema_cache()
+
+        return {
+            "success": True,
+            "message": "Schema cache refreshed successfully",
+            "schema_summary": {
+                "labels": len(schema.get('labels', [])),
+                "relationships": len(schema.get('relationship_types', [])),
+                "entities_with_properties": len(schema.get('properties', {}))
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error refreshing schema cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/chatbot/models")
 async def get_available_models():
     """

@@ -88,6 +88,7 @@
             </div>
 
             <div class="settings-actions">
+                <button type="button" class="btn btn-secondary" id="refresh-schema-btn">Refresh Schema</button>
                 <button type="button" class="btn btn-secondary" id="test-connection-btn">Test Connection</button>
                 <button type="submit" class="btn btn-primary">Save Settings</button>
             </div>
@@ -299,6 +300,55 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
     } catch (error) {
         console.error('Error saving settings:', error);
         alert('Error saving settings: ' + error.message);
+    }
+});
+
+// Refresh schema
+document.getElementById('refresh-schema-btn').addEventListener('click', async () => {
+    const resultDiv = document.getElementById('test-result');
+    const btn = document.getElementById('refresh-schema-btn');
+
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div class="loading">Refreshing schema cache...</div>';
+    btn.disabled = true;
+
+    console.log('Refreshing schema cache...');
+
+    try {
+        const response = await fetch('/api/chatbot/refresh-schema', {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Schema refreshed:', data);
+
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="test-success">
+                    <strong>✓ Schema refreshed successfully!</strong><br>
+                    Labels: ${data.schema_summary.labels}<br>
+                    Relationships: ${data.schema_summary.relationships}<br>
+                    Entities with properties: ${data.schema_summary.entities_with_properties}
+                </div>
+            `;
+        } else {
+            throw new Error(data.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Refresh schema error:', error);
+        resultDiv.innerHTML = `
+            <div class="test-error">
+                <strong>✗ Failed to refresh schema</strong><br>
+                ${error.message}<br>
+                <small>Check the browser console for more details.</small>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
     }
 });
 

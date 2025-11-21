@@ -38,6 +38,7 @@ env/
 # Configuration
 config.yaml
 chatbot_settings.json
+graph_schema_cache.json
 
 # Logs
 *.log
