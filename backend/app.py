@@ -1777,11 +1777,16 @@ async def test_llm_connection():
                 detail="Chatbot not configured. Please configure LLM settings first."
             )
 
-        # Test with a simple query
-        test_response = await llm_service._call_openai(
-            system_prompt="You are a test assistant.",
-            messages=[{"role": "user", "content": "Respond with 'OK' if you receive this message."}]
-        ) if llm_service.settings.provider.value == "openai" else "Test successful"
+        # Test with a simple Cypher generation
+        test_schema = {
+            'labels': ['Test'],
+            'relationship_types': []
+        }
+
+        test_response = await llm_service.generate_cypher(
+            question="Show me all items",
+            graph_schema=test_schema
+        )
 
         return {
             "success": True,
