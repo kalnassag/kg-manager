@@ -5,17 +5,22 @@ This service handles:
 - Text-to-Cypher query generation
 - LLM provider abstraction (OpenAI, Anthropic, Google, Ollama)
 - Response formatting
+- Settings persistence
 """
 import os
 import json
 import logging
 from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
 import httpx
 
 from ..models.chatbot import LLMProvider, LLMSettings, SystemPromptConfig
 
 
 logger = logging.getLogger(__name__)
+
+# Settings file path
+SETTINGS_FILE = Path(__file__).parent.parent.parent / "chatbot_settings.json"
 
 
 class LLMService:
@@ -365,6 +370,74 @@ _llm_service: Optional[LLMService] = None
 _current_settings: Optional[Dict[str, Any]] = None
 
 
+def save_settings(settings: LLMSettings, prompt_config: SystemPromptConfig) -> None:
+    """
+    Save LLM settings to file for persistence.
+
+    Args:
+        settings: LLM settings to save
+        prompt_config: Prompt configuration to save
+    """
+    try:
+        settings_dict = {
+            "provider": settings.provider.value,
+            "model": settings.model,
+            "api_key": settings.api_key,  # Note: In production, encrypt this
+            "temperature": settings.temperature,
+            "max_tokens": settings.max_tokens,
+            "base_url": settings.base_url,
+            "custom_prompt": prompt_config.custom_prompt,
+            "include_schema": prompt_config.include_schema,
+            "include_examples": prompt_config.include_examples
+        }
+
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(settings_dict, f, indent=2)
+
+        logger.info(f"Saved chatbot settings to {SETTINGS_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to save settings: {e}")
+
+
+def load_settings() -> Optional[Tuple[LLMSettings, SystemPromptConfig]]:
+    """
+    Load LLM settings from file.
+
+    Returns:
+        Tuple of (LLMSettings, SystemPromptConfig) or None if not found
+    """
+    try:
+        if not SETTINGS_FILE.exists():
+            logger.info("No saved chatbot settings found")
+            return None
+
+        with open(SETTINGS_FILE, 'r') as f:
+            settings_dict = json.load(f)
+
+        # Reconstruct settings objects
+        llm_settings = LLMSettings(
+            provider=LLMProvider(settings_dict["provider"]),
+            model=settings_dict["model"],
+            api_key=settings_dict.get("api_key"),
+            temperature=settings_dict.get("temperature", 0.1),
+            max_tokens=settings_dict.get("max_tokens", 2000),
+            base_url=settings_dict.get("base_url")
+        )
+
+        prompt_config = SystemPromptConfig(
+            custom_prompt=settings_dict.get("custom_prompt"),
+            include_schema=settings_dict.get("include_schema", True),
+            include_examples=settings_dict.get("include_examples", True)
+        )
+
+        logger.info(f"Loaded chatbot settings from {SETTINGS_FILE}")
+        return (llm_settings, prompt_config)
+
+    except Exception as e:
+        logger.error(f"Failed to load settings: {e}")
+        return None
+
+
 def get_llm_service(
     settings: Optional[LLMSettings] = None,
     prompt_config: Optional[SystemPromptConfig] = None
@@ -373,13 +446,20 @@ def get_llm_service(
     Get or create LLM service instance.
 
     Args:
-        settings: LLM settings (required for first initialization)
-        prompt_config: Prompt configuration (required for first initialization)
+        settings: LLM settings (optional - will load from file if not provided)
+        prompt_config: Prompt configuration (optional - will load from file if not provided)
 
     Returns:
         LLM service instance or None if not configured
     """
     global _llm_service, _current_settings
+
+    # If no settings provided and service not initialized, try loading from file
+    if settings is None and prompt_config is None and _llm_service is None:
+        loaded = load_settings()
+        if loaded:
+            settings, prompt_config = loaded
+            logger.info("Loaded chatbot settings from file")
 
     # If settings provided, update the service
     if settings is not None and prompt_config is not None:
@@ -398,5 +478,8 @@ def get_llm_service(
             _llm_service = LLMService(settings, prompt_config)
             _current_settings = settings_dict
             logger.info(f"LLM service configured with provider: {settings.provider}, model: {settings.model}")
+
+            # Save settings for persistence
+            save_settings(settings, prompt_config)
 
     return _llm_service

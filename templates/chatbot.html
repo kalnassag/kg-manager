@@ -464,9 +464,63 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Load saved settings
+async function loadSavedSettings() {
+    try {
+        console.log('Loading saved chatbot settings...');
+        const response = await fetch('/api/chatbot/settings');
+        const data = await response.json();
+
+        if (data.configured && data.settings) {
+            console.log('Found saved settings:', data.settings);
+
+            const { llm_settings, prompt_config } = data.settings;
+
+            // Pre-fill the form
+            document.getElementById('provider').value = llm_settings.provider;
+            document.getElementById('api-key').value = llm_settings.api_key || '';
+            document.getElementById('model').value = llm_settings.model || '';
+            document.getElementById('temperature').value = llm_settings.temperature;
+            document.getElementById('max-tokens').value = llm_settings.max_tokens;
+            document.getElementById('base-url').value = llm_settings.base_url || '';
+            document.getElementById('custom-prompt').value = prompt_config.custom_prompt || '';
+            document.getElementById('include-schema').checked = prompt_config.include_schema;
+            document.getElementById('include-examples').checked = prompt_config.include_examples;
+
+            // Update model dropdown for current provider
+            updateModelDropdown(llm_settings.provider);
+
+            // Set the model value (needed after dropdown update)
+            setTimeout(() => {
+                document.getElementById('model').value = llm_settings.model || '';
+            }, 100);
+
+            // Mark as configured
+            isConfigured = true;
+            document.getElementById('chat-input').disabled = false;
+            document.getElementById('send-btn').disabled = false;
+
+            // Update welcome message
+            const welcomeNotice = document.querySelector('.config-notice');
+            if (welcomeNotice) {
+                welcomeNotice.textContent = '✅ Chatbot configured and ready! (Settings loaded)';
+                welcomeNotice.style.color = '#155724';
+            }
+
+            console.log('Settings loaded and form populated');
+        } else {
+            console.log('No saved settings found');
+        }
+    } catch (error) {
+        console.error('Error loading saved settings:', error);
+        // Not a critical error - just means no settings saved yet
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadAvailableModels();
+    loadSavedSettings();
 });
 </script>
 {% endblock %}

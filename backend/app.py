@@ -596,6 +596,47 @@ async def test_llm_connection():
         }
 
 
+@app.get("/api/chatbot/settings")
+async def get_chatbot_settings():
+    """
+    Get current chatbot settings.
+
+    Returns:
+        Current LLM and prompt settings, or null if not configured
+    """
+    from .services.llm_service import load_settings
+
+    try:
+        loaded = load_settings()
+        if loaded is None:
+            return {"configured": False, "settings": None}
+
+        settings, prompt_config = loaded
+
+        return {
+            "configured": True,
+            "settings": {
+                "llm_settings": {
+                    "provider": settings.provider.value,
+                    "model": settings.model,
+                    "api_key": settings.api_key if settings.api_key else "",
+                    "temperature": settings.temperature,
+                    "max_tokens": settings.max_tokens,
+                    "base_url": settings.base_url if settings.base_url else ""
+                },
+                "prompt_config": {
+                    "custom_prompt": prompt_config.custom_prompt if prompt_config.custom_prompt else "",
+                    "include_schema": prompt_config.include_schema,
+                    "include_examples": prompt_config.include_examples
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error loading chatbot settings: {e}")
+        return {"configured": False, "settings": None}
+
+
 @app.get("/api/chatbot/models")
 async def get_available_models():
     """
