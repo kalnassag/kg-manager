@@ -39,10 +39,11 @@
 
                 <div class="form-group">
                     <label for="model">Model</label>
-                    <select id="model" name="model" required>
+                    <input type="text" id="model" name="model" list="model-list" required placeholder="Loading models...">
+                    <datalist id="model-list">
                         <option value="">Loading models...</option>
-                    </select>
-                    <small id="model-hint">Select a model for the chosen provider</small>
+                    </datalist>
+                    <small id="model-hint">Select a model or enter manually</small>
                 </div>
 
                 <div class="form-row">
@@ -139,35 +140,72 @@ let availableModels = {};
 // Load available models from API
 async function loadAvailableModels() {
     try {
+        console.log('Loading available models...');
         const response = await fetch('/api/chatbot/models');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
+        console.log('Models loaded:', data);
+
+        if (!data.models) {
+            throw new Error('No models data in response');
+        }
+
         availableModels = data.models;
 
-        // Initialize with OpenAI models
-        updateModelDropdown('openai');
+        // Get the currently selected provider
+        const providerSelect = document.getElementById('provider');
+        const currentProvider = providerSelect.value || 'openai';
+
+        // Initialize with current provider's models
+        updateModelDropdown(currentProvider);
+        console.log('Model dropdown initialized with provider:', currentProvider);
     } catch (error) {
         console.error('Error loading models:', error);
+        alert('Failed to load model list: ' + error.message + '. You can enter the model name manually.');
+        // Fallback to manual entry
+        const modelInput = document.getElementById('model');
+        modelInput.placeholder = 'Enter model name manually (e.g., claude-3-sonnet-20240229)';
+        modelInput.value = '';
     }
 }
 
 // Update model dropdown based on selected provider
 function updateModelDropdown(provider) {
-    const modelSelect = document.getElementById('model');
+    console.log('Updating model dropdown for provider:', provider);
+
+    const modelInput = document.getElementById('model');
+    const modelDatalist = document.getElementById('model-list');
     const models = availableModels[provider] || [];
 
-    modelSelect.innerHTML = '<option value="">Select a model...</option>';
+    console.log(`Found ${models.length} models for ${provider}:`, models);
 
+    // Clear the datalist
+    modelDatalist.innerHTML = '';
+
+    if (models.length === 0) {
+        console.warn(`No models available for provider: ${provider}`);
+        modelInput.placeholder = 'Enter model name manually (e.g., claude-3-sonnet-20240229)';
+        modelInput.value = '';
+        return;
+    }
+
+    // Add models to datalist
     models.forEach(model => {
         const option = document.createElement('option');
         option.value = model.id;
         option.textContent = model.name;
-        option.title = model.description;
-        modelSelect.appendChild(option);
+        modelDatalist.appendChild(option);
     });
 
-    // Select first model by default
+    // Set first model as default
     if (models.length > 0) {
-        modelSelect.value = models[0].id;
+        modelInput.value = models[0].id;
+        modelInput.placeholder = `e.g., ${models[0].id}`;
+        console.log('Selected default model:', models[0].id);
     }
 }
 
@@ -217,6 +255,8 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
         }
     };
 
+    console.log('Saving settings:', settings);
+
     try {
         const response = await fetch('/api/chatbot/settings', {
             method: 'POST',
@@ -224,10 +264,23 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
             body: JSON.stringify(settings)
         });
 
+        console.log('Response status:', response.status);
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
+
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to save settings');
+            let errorMessage = 'Failed to save settings';
+            try {
+                const error = JSON.parse(responseText);
+                errorMessage = error.detail || errorMessage;
+            } catch (e) {
+                errorMessage = responseText || errorMessage;
+            }
+            throw new Error(errorMessage);
         }
+
+        const result = JSON.parse(responseText);
+        console.log('Settings saved:', result);
 
         isConfigured = true;
         document.getElementById('chat-input').disabled = false;
@@ -244,6 +297,7 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
         document.getElementById('settings-panel').style.display = 'none';
 
     } catch (error) {
+        console.error('Error saving settings:', error);
         alert('Error saving settings: ' + error.message);
     }
 });
@@ -254,9 +308,18 @@ document.getElementById('test-connection-btn').addEventListener('click', async (
     resultDiv.style.display = 'block';
     resultDiv.innerHTML = '<div class="loading">Testing connection...</div>';
 
+    console.log('Testing LLM connection...');
+
     try {
         const response = await fetch('/api/chatbot/test-connection');
+        console.log('Test response status:', response.status);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
+        console.log('Test response data:', data);
 
         if (data.success) {
             resultDiv.innerHTML = `
@@ -268,13 +331,21 @@ document.getElementById('test-connection-btn').addEventListener('click', async (
                 </div>
             `;
         } else {
-            throw new Error(data.message || 'Connection failed');
+            // Show the specific error message from the backend
+            resultDiv.innerHTML = `
+                <div class="test-error">
+                    <strong>✗ Connection failed</strong><br>
+                    ${data.message || 'Unknown error'}
+                </div>
+            `;
         }
     } catch (error) {
+        console.error('Test connection error:', error);
         resultDiv.innerHTML = `
             <div class="test-error">
                 <strong>✗ Connection failed</strong><br>
-                ${error.message}
+                ${error.message}<br>
+                <small>Check the browser console for more details.</small>
             </div>
         `;
     }
@@ -394,6 +465,8 @@ function escapeHtml(text) {
 }
 
 // Initialize on page load
-loadAvailableModels();
+document.addEventListener('DOMContentLoaded', () => {
+    loadAvailableModels();
+});
 </script>
 {% endblock %}

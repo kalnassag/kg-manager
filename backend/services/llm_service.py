@@ -268,9 +268,11 @@ Please provide a natural language answer to the question based on these results.
         url = "https://api.anthropic.com/v1/messages"
         headers = {
             "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": "2023-06-01",  # Using stable version
             "Content-Type": "application/json"
         }
+
+        logger.info(f"Calling Anthropic API with model: {self.settings.model}")
 
         payload = {
             "model": self.settings.model,
@@ -281,10 +283,23 @@ Please provide a natural language answer to the question based on these results.
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            return data["content"][0]["text"]
+            try:
+                response = await client.post(url, headers=headers, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return data["content"][0]["text"]
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.text
+                logger.error(f"Anthropic API error: {error_detail}")
+                try:
+                    error_json = e.response.json()
+                    error_msg = error_json.get("error", {}).get("message", error_detail)
+                except:
+                    error_msg = error_detail
+                raise ValueError(f"Anthropic API error: {error_msg}")
+            except httpx.RequestError as e:
+                logger.error(f"Network error calling Anthropic: {e}")
+                raise ValueError(f"Network error: {str(e)}")
 
     async def _call_google(self, system_prompt: str, messages: List[Dict[str, str]]) -> str:
         """Call Google Gemini API."""

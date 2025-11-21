@@ -1768,20 +1768,23 @@ async def test_llm_connection():
     Returns success if the LLM is configured and responding.
     """
     from .services.llm_service import get_llm_service
+    import traceback
 
     try:
         llm_service = get_llm_service()
         if llm_service is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Chatbot not configured. Please configure LLM settings first."
-            )
+            return {
+                "success": False,
+                "message": "Chatbot not configured. Please save LLM settings first."
+            }
 
         # Test with a simple Cypher generation
         test_schema = {
             'labels': ['Test'],
             'relationship_types': []
         }
+
+        logger.info(f"Testing connection with provider: {llm_service.settings.provider.value}, model: {llm_service.settings.model}")
 
         test_response = await llm_service.generate_cypher(
             question="Show me all items",
@@ -1796,9 +1799,30 @@ async def test_llm_connection():
             "test_response": test_response[:100]  # First 100 chars
         }
 
+    except ValueError as e:
+        # Configuration errors (missing API key, etc.)
+        logger.error(f"Configuration error: {e}")
+        return {
+            "success": False,
+            "message": f"Configuration error: {str(e)}"
+        }
     except Exception as e:
+        # Network or API errors
         logger.error(f"Error testing LLM connection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(traceback.format_exc())
+
+        # Try to extract more specific error info
+        error_msg = str(e)
+        if hasattr(e, 'response'):
+            try:
+                error_msg = f"{error_msg} (HTTP {e.response.status_code})"
+            except:
+                pass
+
+        return {
+            "success": False,
+            "message": f"Connection failed: {error_msg}"
+        }
 
 
 @app.get("/api/chatbot/models")
