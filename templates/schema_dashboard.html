@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Property Schema Editor - Product Knowledge Graph Manager{% endblock %}
+
+{% block content %}
+<div class="schema-editor">
+    <div class="page-header">
+        <h1 class="page-title">Property Schema Editor</h1>
+        <p class="page-subtitle">Manage property definitions and translations for your knowledge graph</p>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="schema-stats-grid" id="schema-stats">
+        <div class="stat-card">
+            <div class="stat-number" id="stat-total-properties">-</div>
+            <div class="stat-label">Total Properties</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-entity-types">-</div>
+            <div class="stat-label">Entity Types</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-fully-translated">-</div>
+            <div class="stat-label">Fully Translated</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-avg-coverage">-</div>
+            <div class="stat-label">Avg. Coverage</div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="schema-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-grid">
+            <a href="/schema/properties" class="action-card">
+                <div class="action-icon">📋</div>
+                <h3>Browse Properties</h3>
+                <p>View and manage all property definitions</p>
+            </a>
+
+            <a href="/schema/discover" class="action-card">
+                <div class="action-icon">🔍</div>
+                <h3>Discover Properties</h3>
+                <p>Find undocumented properties in your data</p>
+            </a>
+
+            <a href="/schema/import" class="action-card">
+                <div class="action-icon">📥</div>
+                <h3>Import/Export</h3>
+                <p>Bulk import or export property definitions</p>
+            </a>
+
+            <a href="#" class="action-card" id="create-property-btn">
+                <div class="action-icon">➕</div>
+                <h3>Create Property</h3>
+                <p>Add a new property definition</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Entity Types Breakdown -->
+    <div class="entity-breakdown">
+        <h2>Entity Types</h2>
+        <div id="entity-types-list" class="entity-types-grid">
+            <div class="loading">Loading entity types...</div>
+        </div>
+    </div>
+
+    <!-- Create Property Modal -->
+    <div id="create-property-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Property</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <form id="create-property-form">
+                <div class="form-group">
+                    <label for="property_key">Property Key *</label>
+                    <input type="text" id="property_key" name="property_key" required pattern="[a-z_][a-z0-9_]*" placeholder="e.g., screen_size">
+                    <small>Lowercase with underscores only</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="entity_type">Entity Type *</label>
+                    <select id="entity_type" name="entity_type" required>
+                        <option value="">Select an entity type...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="data_type">Data Type</label>
+                    <select id="data_type" name="data_type">
+                        <option value="STRING">String</option>
+                        <option value="INTEGER">Integer</option>
+                        <option value="FLOAT">Float</option>
+                        <option value="BOOLEAN">Boolean</option>
+                        <option value="DATE">Date</option>
+                        <option value="ARRAY">Array</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="unit">Unit</label>
+                    <input type="text" id="unit" name="unit" placeholder="e.g., USD, inches, GB">
+                </div>
+
+                <div class="form-group">
+                    <label for="en_label">English Label</label>
+                    <input type="text" id="en_label" name="en_label" placeholder="e.g., Screen Size">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-create">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Property</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load statistics
+async function loadStatistics() {
+    try {
+        const response = await fetch('/api/properties/statistics');
+        const data = await response.json();
+
+        let totalProperties = 0;
+        let fullyTranslated = 0;
+        let totalCoverage = 0;
+
+        data.entity_types.forEach(et => {
+            totalProperties += et.total_properties;
+            fullyTranslated += et.fully_translated_properties;
+
+            // Calculate coverage percentage for this entity type
+            const coverage = et.total_properties > 0
+                ? (et.fully_translated_properties / et.total_properties) * 100
+                : 0;
+            totalCoverage += coverage;
+        });
+
+        const avgCoverage = data.entity_types.length > 0
+            ? Math.round(totalCoverage / data.entity_types.length)
+            : 0;
+
+        document.getElementById('stat-total-properties').textContent = totalProperties;
+        document.getElementById('stat-entity-types').textContent = data.total_entity_types;
+        document.getElementById('stat-fully-translated').textContent = fullyTranslated;
+        document.getElementById('stat-avg-coverage').textContent = avgCoverage + '%';
+
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+    }
+}
+
+// Load entity types
+async function loadEntityTypes() {
+    try {
+        const response = await fetch('/api/properties/entity-types');
+        const data = await response.json();
+
+        const container = document.getElementById('entity-types-list');
+
+        if (data.entity_types.length === 0) {
+            container.innerHTML = '<div class="empty-state">No entity types with property definitions yet.</div>';
+            return;
+        }
+
+        container.innerHTML = data.entity_types.map(et => `
+            <a href="/schema/properties?entity_type=${encodeURIComponent(et.entity_type)}" class="entity-type-card">
+                <h3>${et.entity_type}</h3>
+                <div class="entity-type-count">${et.property_count} properties</div>
+            </a>
+        `).join('');
+
+        // Also populate the entity type dropdown in create form
+        const select = document.getElementById('entity_type');
+        const existingOptions = data.entity_types.map(et => et.entity_type);
+
+        // Get all entity types from schema
+        const schemaResponse = await fetch('/api/entity-types');
+        const schemaData = await schemaResponse.json();
+
+        select.innerHTML = '<option value="">Select an entity type...</option>';
+        schemaData.entity_types.forEach(et => {
+            const option = document.createElement('option');
+            option.value = et.label;
+            option.textContent = et.label;
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading entity types:', error);
+        document.getElementById('entity-types-list').innerHTML = '<div class="error">Failed to load entity types</div>';
+    }
+}
+
+// Create property modal
+document.getElementById('create-property-btn').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('create-property-modal').style.display = 'flex';
+});
+
+document.getElementById('modal-close').addEventListener('click', () => {
+    document.getElementById('create-property-modal').style.display = 'none';
+});
+
+document.getElementById('cancel-create').addEventListener('click', () => {
+    document.getElementById('create-property-modal').style.display = 'none';
+});
+
+// Create property form submit
+document.getElementById('create-property-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const translations = [];
+
+    if (formData.get('en_label')) {
+        translations.push({
+            locale: 'en',
+            label: formData.get('en_label')
+        });
+    }
+
+    const propertyData = {
+        property_key: formData.get('property_key').toLowerCase(),
+        entity_type: formData.get('entity_type'),
+        data_type: formData.get('data_type'),
+        unit: formData.get('unit') || null,
+        translations: translations.length > 0 ? translations : null
+    };
+
+    try {
+        const response = await fetch('/api/properties', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(propertyData)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create property');
+        }
+
+        const result = await response.json();
+
+        // Redirect to property detail page
+        window.location.href = `/schema/properties/${result.property.entity_type}/${result.property.property_key}`;
+
+    } catch (error) {
+        alert('Error creating property: ' + error.message);
+    }
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadStatistics();
+    loadEntityTypes();
+});
+</script>
+{% endblock %}

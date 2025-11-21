@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Property - Property Schema Editor{% endblock %}
+
+{% block content %}
+<div class="schema-editor">
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/schema/properties" class="back-link">&larr; Back to Properties</a>
+            <h1 class="page-title" id="property-title">Loading...</h1>
+        </div>
+        <div class="page-header-right">
+            <button class="btn btn-danger" id="delete-property-btn">Delete Property</button>
+        </div>
+    </div>
+
+    <!-- Property Metadata -->
+    <div class="property-metadata-section">
+        <h2>Property Metadata</h2>
+        <form id="metadata-form" class="metadata-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Property Key</label>
+                    <input type="text" id="property_key" readonly class="readonly-input">
+                </div>
+
+                <div class="form-group">
+                    <label>Entity Type</label>
+                    <input type="text" id="entity_type" readonly class="readonly-input">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="data_type">Data Type</label>
+                    <select id="data_type" name="data_type">
+                        <option value="STRING">String</option>
+                        <option value="INTEGER">Integer</option>
+                        <option value="FLOAT">Float</option>
+                        <option value="BOOLEAN">Boolean</option>
+                        <option value="DATE">Date</option>
+                        <option value="ARRAY">Array</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="unit">Unit</label>
+                    <input type="text" id="unit" name="unit" placeholder="e.g., USD, inches, GB">
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Metadata</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Translations Grid -->
+    <div class="translations-section">
+        <div class="translations-header">
+            <h2>Translations</h2>
+            <div class="translation-stats">
+                <span id="translation-count">0</span> / <span id="total-locales">7</span> languages
+            </div>
+        </div>
+
+        <div class="translations-grid">
+            <div id="translations-container">
+                <div class="loading">Loading translations...</div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" id="save-translations-btn">Save All Translations</button>
+    </div>
+</div>
+
+<script>
+let propertyData = null;
+let translations = {};
+const entityType = "{{ entity_type }}";
+const propertyKey = "{{ property_key }}";
+
+// Load property details
+async function loadProperty() {
+    try {
+        const response = await fetch(`/api/properties/${entityType}/${propertyKey}`);
+        if (!response.ok) {
+            throw new Error('Property not found');
+        }
+
+        propertyData = await response.json();
+
+        // Update page title and form
+        document.getElementById('property-title').textContent = `${propertyData.property_key}`;
+        document.getElementById('property_key').value = propertyData.property_key;
+        document.getElementById('entity_type').value = propertyData.entity_type;
+        document.getElementById('data_type').value = propertyData.data_type || 'STRING';
+        document.getElementById('unit').value = propertyData.unit || '';
+
+        // Store translations
+        translations = {};
+        propertyData.translations.forEach(t => {
+            translations[t.locale] = t.label;
+        });
+
+        loadTranslations();
+
+    } catch (error) {
+        console.error('Error loading property:', error);
+        alert('Error loading property: ' + error.message);
+        window.location.href = '/schema/properties';
+    }
+}
+
+// Load translations grid
+async function loadTranslations() {
+    try {
+        const localesResponse = await fetch('/api/locales');
+        const localesData = await localesResponse.json();
+
+        const container = document.getElementById('translations-container');
+
+        container.innerHTML = localesData.locales.map(locale => {
+            const currentValue = translations[locale.code] || '';
+            const hasTranslation = !!currentValue;
+
+            return `
+                <div class="translation-row ${hasTranslation ? 'has-translation' : 'no-translation'}">
+                    <div class="locale-info">
+                        <div class="locale-code">${locale.code}</div>
+                        <div class="locale-name">${locale.name}</div>
+                    </div>
+                    <div class="translation-input-wrapper">
+                        <input
+                            type="text"
+                            class="translation-input"
+                            data-locale="${locale.code}"
+                            value="${currentValue}"
+                            placeholder="Enter translation for ${locale.name}..."
+                        >
+                        ${hasTranslation ? '<span class="translation-status">✓</span>' : '<span class="translation-status">○</span>'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Update translation count
+        const count = Object.keys(translations).filter(k => translations[k]).length;
+        document.getElementById('translation-count').textContent = count;
+        document.getElementById('total-locales').textContent = localesData.locales.length;
+
+        // Add input event listeners
+        document.querySelectorAll('.translation-input').forEach(input => {
+            input.addEventListener('input', (e) => {
+                const locale = e.target.dataset.locale;
+                const value = e.target.value.trim();
+
+                if (value) {
+                    translations[locale] = value;
+                    e.target.closest('.translation-row').classList.add('has-translation');
+                    e.target.closest('.translation-row').classList.remove('no-translation');
+                    e.target.nextElementSibling.textContent = '✓';
+                } else {
+                    delete translations[locale];
+                    e.target.closest('.translation-row').classList.remove('has-translation');
+                    e.target.closest('.translation-row').classList.add('no-translation');
+                    e.target.nextElementSibling.textContent = '○';
+                }
+
+                // Update count
+                const count = Object.keys(translations).filter(k => translations[k]).length;
+                document.getElementById('translation-count').textContent = count;
+            });
+        });
+
+    } catch (error) {
+        console.error('Error loading translations:', error);
+    }
+}
+
+// Save metadata
+document.getElementById('metadata-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const updateData = {
+        data_type: formData.get('data_type'),
+        unit: formData.get('unit') || null
+    };
+
+    try {
+        const response = await fetch(`/api/properties/${entityType}/${propertyKey}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to update property');
+        }
+
+        alert('Metadata saved successfully!');
+
+    } catch (error) {
+        alert('Error saving metadata: ' + error.message);
+    }
+});
+
+// Save all translations
+document.getElementById('save-translations-btn').addEventListener('click', async () => {
+    try {
+        const response = await fetch(`/api/properties/${entityType}/${propertyKey}/translations/bulk`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                translations: translations
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save translations');
+        }
+
+        alert('Translations saved successfully!');
+        loadProperty(); // Reload to get updated data
+
+    } catch (error) {
+        alert('Error saving translations: ' + error.message);
+    }
+});
+
+// Delete property
+document.getElementById('delete-property-btn').addEventListener('click', async () => {
+    if (!confirm(`Delete property ${entityType}.${propertyKey}? This action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/properties/${entityType}/${propertyKey}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete property');
+        }
+
+        alert('Property deleted successfully!');
+        window.location.href = '/schema/properties';
+
+    } catch (error) {
+        alert('Error deleting property: ' + error.message);
+    }
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadProperty();
+});
+</script>
+{% endblock %}

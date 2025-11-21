@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Discover Properties - Property Schema Editor{% endblock %}
+
+{% block content %}
+<div class="schema-editor">
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/schema" class="back-link">&larr; Back to Schema Dashboard</a>
+            <h1 class="page-title">Property Discovery</h1>
+        </div>
+    </div>
+
+    <div class="discover-section">
+        <div class="discover-intro">
+            <p>Discover properties that exist in your graph data but don't have PropertyDefinition nodes yet.</p>
+            <p>This tool scans actual entity nodes and identifies undocumented properties.</p>
+        </div>
+
+        <div class="discover-controls">
+            <div class="form-group">
+                <label for="discover-entity-type">Entity Type:</label>
+                <select id="discover-entity-type">
+                    <option value="">Select an entity type...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sample-limit">Sample Limit:</label>
+                <input type="number" id="sample-limit" value="10" min="1" max="50">
+            </div>
+
+            <button class="btn btn-primary" id="discover-btn" disabled>Discover Properties</button>
+        </div>
+
+        <div id="discover-results" style="display: none;">
+            <div class="discover-summary">
+                <h2>Discovery Results</h2>
+                <div class="discovery-stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="entities-scanned">0</span>
+                        <span class="stat-label">Entities Scanned</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="undocumented-count">0</span>
+                        <span class="stat-label">Undocumented Properties</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="undocumented-properties" class="undocumented-properties">
+            </div>
+
+            <div id="no-results" class="empty-state" style="display: none;">
+                <p>No undocumented properties found!</p>
+                <p>All properties in this entity type have PropertyDefinition nodes.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load entity types
+async function loadEntityTypes() {
+    try {
+        const response = await fetch('/api/entity-types');
+        const data = await response.json();
+
+        const select = document.getElementById('discover-entity-type');
+        data.entity_types.forEach(et => {
+            const option = document.createElement('option');
+            option.value = et.label;
+            option.textContent = et.label;
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading entity types:', error);
+    }
+}
+
+// Enable/disable discover button
+document.getElementById('discover-entity-type').addEventListener('change', (e) => {
+    document.getElementById('discover-btn').disabled = !e.target.value;
+});
+
+// Discover properties
+document.getElementById('discover-btn').addEventListener('click', async () => {
+    const entityType = document.getElementById('discover-entity-type').value;
+    const sampleLimit = document.getElementById('sample-limit').value;
+
+    if (!entityType) return;
+
+    document.getElementById('discover-btn').disabled = true;
+    document.getElementById('discover-btn').textContent = 'Discovering...';
+
+    try {
+        const response = await fetch(`/api/properties/discover/${entityType}?limit=${sampleLimit}`);
+        const data = await response.json();
+
+        // Show results
+        document.getElementById('discover-results').style.display = 'block';
+        document.getElementById('entities-scanned').textContent = data.total_entities_scanned;
+        document.getElementById('undocumented-count').textContent = data.total_undocumented;
+
+        const container = document.getElementById('undocumented-properties');
+        const noResults = document.getElementById('no-results');
+
+        if (data.undocumented_properties.length === 0) {
+            container.innerHTML = '';
+            noResults.style.display = 'block';
+            return;
+        }
+
+        noResults.style.display = 'none';
+
+        container.innerHTML = data.undocumented_properties.map((prop, index) => `
+            <div class="undocumented-property-card">
+                <div class="property-header">
+                    <h3><code>${prop.property_key}</code></h3>
+                    <div class="property-meta">
+                        <span class="data-type-badge">${prop.suggested_data_type}</span>
+                        <span class="occurrence-badge">${prop.occurrence_count} occurrences</span>
+                    </div>
+                </div>
+
+                <div class="sample-values">
+                    <strong>Sample Values:</strong>
+                    <div class="value-list">
+                        ${prop.sample_values.slice(0, 5).map(val =>
+                            `<span class="value-chip">${val !== null && val !== undefined ? val : 'null'}</span>`
+                        ).join('')}
+                        ${prop.sample_values.length > 5 ? `<span class="value-chip">+${prop.sample_values.length - 5} more</span>` : ''}
+                    </div>
+                </div>
+
+                <div class="property-actions">
+                    <button class="btn btn-primary" onclick="createProperty('${prop.property_key}', '${entityType}', '${prop.suggested_data_type}')">
+                        Create Property Definition
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        alert('Error discovering properties: ' + error.message);
+    } finally {
+        document.getElementById('discover-btn').disabled = false;
+        document.getElementById('discover-btn').textContent = 'Discover Properties';
+    }
+});
+
+// Create property from discovered
+async function createProperty(propertyKey, entityType, suggestedDataType) {
+    if (!confirm(`Create PropertyDefinition for ${propertyKey}?`)) return;
+
+    try {
+        const response = await fetch('/api/properties', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                property_key: propertyKey,
+                entity_type: entityType,
+                data_type: suggestedDataType,
+                unit: null,
+                translations: null
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to create property');
+        }
+
+        const result = await response.json();
+
+        // Redirect to edit page
+        window.location.href = `/schema/properties/${entityType}/${propertyKey}`;
+
+    } catch (error) {
+        alert('Error creating property: ' + error.message);
+    }
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadEntityTypes();
+});
+</script>
+{% endblock %}

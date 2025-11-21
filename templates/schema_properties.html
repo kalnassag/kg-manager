@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Properties - Property Schema Editor{% endblock %}
+
+{% block content %}
+<div class="schema-editor">
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/schema" class="back-link">&larr; Back to Schema Dashboard</a>
+            <h1 class="page-title">Property Definitions</h1>
+        </div>
+        <div class="page-header-right">
+            <button class="btn btn-secondary" id="export-btn">Export</button>
+            <a href="/schema/import" class="btn btn-secondary">Import</a>
+            <a href="#" class="btn btn-primary" id="create-property-btn">+ Create Property</a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+        <div class="filter-group">
+            <label for="entity-type-filter">Entity Type:</label>
+            <select id="entity-type-filter">
+                <option value="">All Types</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="status-filter">Translation Status:</label>
+            <select id="status-filter">
+                <option value="">All</option>
+                <option value="complete">Complete</option>
+                <option value="incomplete">Incomplete</option>
+                <option value="none">No Translations</option>
+            </select>
+        </div>
+
+        <div class="filter-group search-filter">
+            <label for="search-filter">Search:</label>
+            <input type="text" id="search-filter" placeholder="Search property keys...">
+        </div>
+
+        <button class="btn btn-secondary" id="clear-filters">Clear Filters</button>
+    </div>
+
+    <!-- Properties Table -->
+    <div class="table-container">
+        <table class="properties-table">
+            <thead>
+                <tr>
+                    <th>Property Key</th>
+                    <th>Entity Type</th>
+                    <th>Data Type</th>
+                    <th>Unit</th>
+                    <th>Translations</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="properties-table-body">
+                <tr>
+                    <td colspan="7" class="loading">Loading properties...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="empty-state" class="empty-state" style="display: none;">
+        <p>No properties found.</p>
+        <p><a href="#" id="create-first-property">Create your first property</a> or adjust your filters.</p>
+    </div>
+</div>
+
+<script>
+let currentFilters = {
+    entity_type: null,
+    translation_status: null,
+    search: null
+};
+
+// Load properties
+async function loadProperties() {
+    try {
+        const params = new URLSearchParams();
+        if (currentFilters.entity_type) params.append('entity_type', currentFilters.entity_type);
+        if (currentFilters.translation_status) params.append('translation_status', currentFilters.translation_status);
+        if (currentFilters.search) params.append('search', currentFilters.search);
+
+        const response = await fetch(`/api/properties?${params.toString()}`);
+        const data = await response.json();
+
+        const tbody = document.getElementById('properties-table-body');
+        const emptyState = document.getElementById('empty-state');
+
+        if (data.properties.length === 0) {
+            tbody.innerHTML = '';
+            emptyState.style.display = 'block';
+            return;
+        }
+
+        emptyState.style.display = 'none';
+
+        tbody.innerHTML = data.properties.map(prop => {
+            const statusClass = prop.status === 'complete' ? 'status-complete' :
+                                prop.status === 'incomplete' ? 'status-incomplete' : 'status-none';
+            const statusText = prop.status === 'complete' ? 'Complete' :
+                               prop.status === 'incomplete' ? 'Incomplete' : 'None';
+
+            return `
+                <tr>
+                    <td><code>${prop.property_key}</code></td>
+                    <td>${prop.entity_type}</td>
+                    <td><span class="data-type-badge">${prop.data_type}</span></td>
+                    <td>${prop.unit || '-'}</td>
+                    <td>${prop.translation_count} / 7</td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td>
+                        <a href="/schema/properties/${prop.entity_type}/${prop.property_key}" class="btn-small">Edit</a>
+                        <button class="btn-small btn-danger" onclick="deleteProperty('${prop.entity_type}', '${prop.property_key}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error loading properties:', error);
+        document.getElementById('properties-table-body').innerHTML = '<tr><td colspan="7" class="error">Failed to load properties</td></tr>';
+    }
+}
+
+// Load entity types for filter
+async function loadEntityTypeFilter() {
+    try {
+        const response = await fetch('/api/entity-types');
+        const data = await response.json();
+
+        const select = document.getElementById('entity-type-filter');
+        data.entity_types.forEach(et => {
+            const option = document.createElement('option');
+            option.value = et.label;
+            option.textContent = et.label;
+            select.appendChild(option);
+        });
+
+        // Check URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        const entityType = urlParams.get('entity_type');
+        if (entityType) {
+            select.value = entityType;
+            currentFilters.entity_type = entityType;
+        }
+
+    } catch (error) {
+        console.error('Error loading entity types:', error);
+    }
+}
+
+// Filter event listeners
+document.getElementById('entity-type-filter').addEventListener('change', (e) => {
+    currentFilters.entity_type = e.target.value || null;
+    loadProperties();
+});
+
+document.getElementById('status-filter').addEventListener('change', (e) => {
+    currentFilters.translation_status = e.target.value || null;
+    loadProperties();
+});
+
+document.getElementById('search-filter').addEventListener('input', (e) => {
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => {
+        currentFilters.search = e.target.value || null;
+        loadProperties();
+    }, 300);
+});
+
+document.getElementById('clear-filters').addEventListener('click', () => {
+    currentFilters = {
+        entity_type: null,
+        translation_status: null,
+        search: null
+    };
+    document.getElementById('entity-type-filter').value = '';
+    document.getElementById('status-filter').value = '';
+    document.getElementById('search-filter').value = '';
+    loadProperties();
+});
+
+// Export
+document.getElementById('export-btn').addEventListener('click', async () => {
+    const format = prompt('Export format (json or csv):', 'json');
+    if (!format || !['json', 'csv'].includes(format)) return;
+
+    const params = new URLSearchParams({ format });
+    if (currentFilters.entity_type) params.append('entity_type', currentFilters.entity_type);
+
+    try {
+        const response = await fetch(`/api/properties/export?${params.toString()}`);
+        const data = await response.json();
+
+        // Download file
+        const blob = new Blob([data.data], { type: format === 'json' ? 'application/json' : 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `properties_export.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+    } catch (error) {
+        alert('Error exporting: ' + error.message);
+    }
+});
+
+// Delete property
+async function deleteProperty(entityType, propertyKey) {
+    if (!confirm(`Delete property ${entityType}.${propertyKey}? This cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/api/properties/${entityType}/${propertyKey}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete property');
+        }
+
+        loadProperties();
+
+    } catch (error) {
+        alert('Error deleting property: ' + error.message);
+    }
+}
+
+// Create property redirect
+document.getElementById('create-property-btn').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = '/schema';
+});
+
+document.getElementById('create-first-property').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = '/schema';
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadEntityTypeFilter();
+    loadProperties();
+});
+</script>
+{% endblock %}

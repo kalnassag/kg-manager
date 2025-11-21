@@ -769,6 +769,850 @@ async def expand_node(label: str, entity_id: str, depth: int = 1):
     """Expand a specific node to show its connections."""
     return await explore_graph(label=label, entity_id=entity_id, depth=depth, limit=100)
 
+# Property Schema Management API Endpoints
+
+@app.get("/api/properties")
+async def list_properties(
+    entity_type: Optional[str] = None,
+    translation_status: Optional[str] = None,
+    search: Optional[str] = None
+):
+    """
+    List all property definitions with optional filters.
+
+    Args:
+        entity_type: Filter by entity type (e.g., 'Laptop')
+        translation_status: Filter by translation status ('complete', 'incomplete', 'none')
+        search: Search in property keys
+
+    Returns:
+        List of properties with translation counts and status
+
+    Example:
+        GET /api/properties?entity_type=Laptop&translation_status=incomplete
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .utils.locales import get_all_locales
+
+    try:
+        queries = get_property_schema_queries()
+        expected_locale_count = len(get_all_locales())
+
+        properties = queries.get_all_properties(
+            entity_type=entity_type,
+            translation_status=translation_status,
+            search=search,
+            expected_locale_count=expected_locale_count
+        )
+
+        return {
+            "properties": properties,
+            "total_count": len(properties),
+            "entity_type": entity_type
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing properties: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/{entity_type}/{property_key}")
+async def get_property_detail(entity_type: str, property_key: str):
+    """
+    Get a single property definition with all translations.
+
+    Args:
+        entity_type: Entity type (e.g., 'Laptop')
+        property_key: Property key (e.g., 'screen_size')
+
+    Returns:
+        Property definition with all translations
+
+    Example:
+        GET /api/properties/Laptop/screen_size
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        queries = get_property_schema_queries()
+        property_def = queries.get_property(entity_type, property_key)
+
+        if not property_def:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Property not found: {entity_type}.{property_key}"
+            )
+
+        return property_def
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting property: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/properties")
+async def create_property(request: Request):
+    """
+    Create a new property definition with optional translations.
+
+    Request body should match CreatePropertyRequest model.
+
+    Returns:
+        Created property definition
+
+    Example:
+        POST /api/properties
+        {
+            "property_key": "price",
+            "entity_type": "Laptop",
+            "data_type": "FLOAT",
+            "unit": "USD",
+            "translations": [
+                {"locale": "en", "label": "Price"},
+                {"locale": "es-ES", "label": "Precio"}
+            ]
+        }
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .models.property_schema import CreatePropertyRequest
+
+    try:
+        # Parse and validate request
+        data = await request.json()
+        create_request = CreatePropertyRequest(**data)
+
+        queries = get_property_schema_queries()
+
+        # Create property
+        property_def = queries.create_property(
+            property_key=create_request.property_key,
+            entity_type=create_request.entity_type,
+            data_type=create_request.data_type,
+            unit=create_request.unit,
+            translations=create_request.translations.dict() if create_request.translations else None
+        )
+
+        return {
+            "success": True,
+            "property": property_def
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating property: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/properties/{entity_type}/{property_key}")
+async def update_property_metadata(
+    entity_type: str,
+    property_key: str,
+    request: Request
+):
+    """
+    Update property metadata (data_type, unit).
+
+    Args:
+        entity_type: Entity type
+        property_key: Property key
+
+    Request body should match UpdatePropertyRequest model.
+
+    Example:
+        PUT /api/properties/Laptop/screen_size
+        {
+            "data_type": "FLOAT",
+            "unit": "inches"
+        }
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .models.property_schema import UpdatePropertyRequest
+
+    try:
+        # Parse and validate request
+        data = await request.json()
+        update_request = UpdatePropertyRequest(**data)
+
+        queries = get_property_schema_queries()
+
+        # Update property
+        success = queries.update_property(
+            entity_type=entity_type,
+            property_key=property_key,
+            data_type=update_request.data_type,
+            unit=update_request.unit
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Property not found: {entity_type}.{property_key}"
+            )
+
+        # Get updated property
+        property_def = queries.get_property(entity_type, property_key)
+
+        return {
+            "success": True,
+            "property": property_def
+        }
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating property: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/properties/{entity_type}/{property_key}")
+async def delete_property_definition(entity_type: str, property_key: str):
+    """
+    Delete a property definition and all its translations.
+
+    Args:
+        entity_type: Entity type
+        property_key: Property key
+
+    Example:
+        DELETE /api/properties/Laptop/old_property
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        queries = get_property_schema_queries()
+        success = queries.delete_property(entity_type, property_key)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Property not found: {entity_type}.{property_key}"
+            )
+
+        return {
+            "success": True,
+            "message": f"Property {entity_type}.{property_key} deleted"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting property: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/properties/{entity_type}/{property_key}/translations/{locale}")
+async def set_property_translation(
+    entity_type: str,
+    property_key: str,
+    locale: str,
+    request: Request
+):
+    """
+    Add or update a single translation for a property.
+
+    Args:
+        entity_type: Entity type
+        property_key: Property key
+        locale: Locale code (e.g., 'es-ES')
+
+    Request body should contain 'label' field.
+
+    Example:
+        PUT /api/properties/Laptop/price/translations/es-ES
+        {
+            "label": "Precio"
+        }
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .utils.locales import normalize_locale
+
+    try:
+        # Validate locale
+        normalized_locale = normalize_locale(locale)
+        if not normalized_locale:
+            raise HTTPException(status_code=400, detail=f"Unsupported locale: {locale}")
+
+        # Parse request
+        data = await request.json()
+        label = data.get('label')
+
+        if not label:
+            raise HTTPException(status_code=400, detail="Missing 'label' field")
+
+        queries = get_property_schema_queries()
+        success = queries.set_translation(
+            entity_type=entity_type,
+            property_key=property_key,
+            locale=normalized_locale,
+            label=label
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Property not found: {entity_type}.{property_key}"
+            )
+
+        return {
+            "success": True,
+            "message": f"Translation set for {normalized_locale}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting translation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/properties/{entity_type}/{property_key}/translations/bulk")
+async def set_bulk_translations(
+    entity_type: str,
+    property_key: str,
+    request: Request
+):
+    """
+    Update multiple translations at once for a property.
+
+    Args:
+        entity_type: Entity type
+        property_key: Property key
+
+    Request body should contain 'translations' object mapping locale to label.
+
+    Example:
+        POST /api/properties/Laptop/price/translations/bulk
+        {
+            "translations": {
+                "en": "Price",
+                "es-ES": "Precio",
+                "fr": "Prix"
+            }
+        }
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        # Parse request
+        data = await request.json()
+        translations = data.get('translations', {})
+
+        if not translations:
+            raise HTTPException(status_code=400, detail="Missing 'translations' field")
+
+        queries = get_property_schema_queries()
+        success = queries.set_translations_bulk(
+            entity_type=entity_type,
+            property_key=property_key,
+            translations=translations
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Property not found: {entity_type}.{property_key}"
+            )
+
+        return {
+            "success": True,
+            "message": f"Updated {len(translations)} translations"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting bulk translations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/properties/{entity_type}/{property_key}/translations/{locale}")
+async def delete_property_translation(
+    entity_type: str,
+    property_key: str,
+    locale: str
+):
+    """
+    Delete a specific translation for a property.
+
+    Args:
+        entity_type: Entity type
+        property_key: Property key
+        locale: Locale code
+
+    Example:
+        DELETE /api/properties/Laptop/price/translations/es-ES
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        queries = get_property_schema_queries()
+        success = queries.delete_translation(entity_type, property_key, locale)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Translation not found: {entity_type}.{property_key} ({locale})"
+            )
+
+        return {
+            "success": True,
+            "message": f"Translation deleted for {locale}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting translation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/discover/{entity_type}")
+async def discover_undocumented_properties(entity_type: str, limit: int = 10):
+    """
+    Discover properties that exist in the data but don't have PropertyDefinition nodes.
+
+    Args:
+        entity_type: Entity type to scan
+        limit: Maximum number of sample values per property
+
+    Returns:
+        List of undocumented properties with sample values and suggested data types
+
+    Example:
+        GET /api/properties/discover/Laptop?limit=5
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        queries = get_property_schema_queries()
+        result = queries.discover_undocumented_properties(entity_type, sample_limit=limit)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error discovering properties: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/statistics")
+async def get_property_statistics():
+    """
+    Get overall property statistics across all entity types.
+
+    Returns:
+        Statistics including total properties, translation counts per entity type
+
+    Example:
+        GET /api/properties/statistics
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .utils.locales import get_all_locales
+
+    try:
+        queries = get_property_schema_queries()
+        expected_locale_count = len(get_all_locales())
+
+        stats = queries.get_statistics(expected_locale_count)
+
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error getting statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/coverage/{entity_type}")
+async def get_property_coverage(entity_type: str):
+    """
+    Get translation coverage report for a specific entity type.
+
+    Shows which properties have translations in which locales.
+
+    Args:
+        entity_type: Entity type to analyze
+
+    Returns:
+        Coverage report with per-property breakdown
+
+    Example:
+        GET /api/properties/coverage/Laptop
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .utils.locales import get_all_locales
+
+    try:
+        queries = get_property_schema_queries()
+        expected_locales = [loc['code'] for loc in get_all_locales()]
+
+        coverage = queries.get_coverage_report(entity_type, expected_locales)
+
+        return coverage
+
+    except Exception as e:
+        logger.error(f"Error getting coverage report: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/entity-types")
+async def get_property_entity_types():
+    """
+    Get list of entity types that have property definitions.
+
+    Returns:
+        List of entity types with property counts
+
+    Example:
+        GET /api/properties/entity-types
+    """
+    from .db.property_schema import get_property_schema_queries
+
+    try:
+        queries = get_property_schema_queries()
+        entity_types = queries.get_entity_types()
+
+        return {
+            "entity_types": entity_types,
+            "total_count": len(entity_types)
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting entity types: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/properties/import")
+async def import_properties(request: Request):
+    """
+    Import property definitions from JSON or CSV format.
+
+    Request body should contain:
+    - format: 'json' or 'csv'
+    - data: JSON array or CSV content
+    - merge: true to merge with existing, false to replace (optional, default: true)
+
+    JSON format:
+    [
+        {
+            "property_key": "price",
+            "entity_type": "Laptop",
+            "data_type": "FLOAT",
+            "unit": "USD",
+            "translations": {
+                "en": "Price",
+                "es-ES": "Precio"
+            }
+        }
+    ]
+
+    CSV format:
+    property_key,entity_type,data_type,unit,en,es-ES,fr
+    price,Laptop,FLOAT,USD,Price,Precio,Prix
+
+    Example:
+        POST /api/properties/import
+    """
+    from .db.property_schema import get_property_schema_queries
+    import json
+    import csv
+    import io
+
+    try:
+        data = await request.json()
+        format_type = data.get('format', 'json')
+        import_data = data.get('data', '')
+        merge = data.get('merge', True)
+
+        if not import_data:
+            raise HTTPException(status_code=400, detail="Missing 'data' field")
+
+        queries = get_property_schema_queries()
+        created = 0
+        updated = 0
+        errors = []
+
+        if format_type == 'json':
+            # Parse JSON
+            try:
+                properties = json.loads(import_data) if isinstance(import_data, str) else import_data
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON: {str(e)}")
+
+            if not isinstance(properties, list):
+                raise HTTPException(status_code=400, detail="JSON data must be an array")
+
+            # Process each property
+            for prop in properties:
+                try:
+                    property_key = prop.get('property_key')
+                    entity_type = prop.get('entity_type')
+                    data_type = prop.get('data_type', 'STRING')
+                    unit = prop.get('unit')
+                    translations = prop.get('translations', {})
+
+                    if not property_key or not entity_type:
+                        errors.append(f"Missing property_key or entity_type in: {prop}")
+                        continue
+
+                    # Check if property exists
+                    existing = queries.get_property(entity_type, property_key)
+
+                    if existing and not merge:
+                        # Skip if not merging
+                        continue
+                    elif existing:
+                        # Update existing
+                        queries.update_property(entity_type, property_key, data_type, unit)
+                        if translations:
+                            queries.set_translations_bulk(entity_type, property_key, translations)
+                        updated += 1
+                    else:
+                        # Create new
+                        translation_list = [{"locale": k, "label": v} for k, v in translations.items()]
+                        queries.create_property(
+                            property_key=property_key,
+                            entity_type=entity_type,
+                            data_type=data_type,
+                            unit=unit,
+                            translations=translation_list if translation_list else None
+                        )
+                        created += 1
+
+                except Exception as e:
+                    errors.append(f"Error processing {prop.get('property_key', 'unknown')}: {str(e)}")
+
+        elif format_type == 'csv':
+            # Parse CSV
+            try:
+                csv_file = io.StringIO(import_data)
+                reader = csv.DictReader(csv_file)
+
+                # Get column names
+                if not reader.fieldnames:
+                    raise HTTPException(status_code=400, detail="CSV has no headers")
+
+                # Expected columns
+                required_cols = ['property_key', 'entity_type']
+                if not all(col in reader.fieldnames for col in required_cols):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"CSV must have columns: {', '.join(required_cols)}"
+                    )
+
+                # Get locale columns (any column not in standard fields)
+                standard_fields = {'property_key', 'entity_type', 'data_type', 'unit'}
+                locale_cols = [col for col in reader.fieldnames if col not in standard_fields]
+
+                # Process each row
+                for row in reader:
+                    try:
+                        property_key = row.get('property_key', '').strip()
+                        entity_type = row.get('entity_type', '').strip()
+                        data_type = row.get('data_type', 'STRING').strip() or 'STRING'
+                        unit = row.get('unit', '').strip() or None
+
+                        if not property_key or not entity_type:
+                            errors.append(f"Missing property_key or entity_type in row: {row}")
+                            continue
+
+                        # Build translations from locale columns
+                        translations = {}
+                        for locale_col in locale_cols:
+                            label = row.get(locale_col, '').strip()
+                            if label:
+                                translations[locale_col] = label
+
+                        # Check if property exists
+                        existing = queries.get_property(entity_type, property_key)
+
+                        if existing and not merge:
+                            continue
+                        elif existing:
+                            queries.update_property(entity_type, property_key, data_type, unit)
+                            if translations:
+                                queries.set_translations_bulk(entity_type, property_key, translations)
+                            updated += 1
+                        else:
+                            translation_list = [{"locale": k, "label": v} for k, v in translations.items()]
+                            queries.create_property(
+                                property_key=property_key,
+                                entity_type=entity_type,
+                                data_type=data_type,
+                                unit=unit,
+                                translations=translation_list if translation_list else None
+                            )
+                            created += 1
+
+                    except Exception as e:
+                        errors.append(f"Error processing row {row.get('property_key', 'unknown')}: {str(e)}")
+
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid CSV: {str(e)}")
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported format: {format_type}")
+
+        return {
+            "success": True,
+            "created": created,
+            "updated": updated,
+            "errors": errors,
+            "total_processed": created + updated
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing properties: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/properties/export")
+async def export_properties(
+    format: str = 'json',
+    entity_type: Optional[str] = None
+):
+    """
+    Export property definitions to JSON or CSV format.
+
+    Args:
+        format: Export format ('json' or 'csv')
+        entity_type: Optional filter by entity type
+
+    Returns:
+        Exported data in requested format
+
+    Example:
+        GET /api/properties/export?format=json
+        GET /api/properties/export?format=csv&entity_type=Laptop
+    """
+    from .db.property_schema import get_property_schema_queries
+    from .utils.locales import get_all_locales
+    import json
+    import csv
+    import io
+
+    try:
+        if format not in ['json', 'csv']:
+            raise HTTPException(status_code=400, detail="format must be 'json' or 'csv'")
+
+        queries = get_property_schema_queries()
+
+        # Get all properties with details
+        properties = queries.get_all_properties(
+            entity_type=entity_type,
+            expected_locale_count=len(get_all_locales())
+        )
+
+        # Enrich with full translation details
+        export_data = []
+        for prop in properties:
+            # Get full property details including translations
+            full_prop = queries.get_property(prop['entity_type'], prop['property_key'])
+            if full_prop:
+                export_data.append(full_prop)
+
+        if format == 'json':
+            # Export as JSON
+            output = json.dumps(export_data, indent=2, ensure_ascii=False)
+
+            return {
+                "format": "json",
+                "data": output,
+                "total_properties": len(export_data)
+            }
+
+        elif format == 'csv':
+            # Export as CSV
+            # Get all locales
+            locales = [loc['code'] for loc in get_all_locales()]
+
+            # Build CSV
+            output = io.StringIO()
+            fieldnames = ['property_key', 'entity_type', 'data_type', 'unit'] + locales
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+
+            writer.writeheader()
+
+            for prop in export_data:
+                row = {
+                    'property_key': prop['property_key'],
+                    'entity_type': prop['entity_type'],
+                    'data_type': prop.get('data_type', 'STRING'),
+                    'unit': prop.get('unit', '')
+                }
+
+                # Add translations
+                for trans in prop.get('translations', []):
+                    locale = trans['locale']
+                    if locale in locales:
+                        row[locale] = trans['label']
+
+                writer.writerow(row)
+
+            csv_content = output.getvalue()
+
+            return {
+                "format": "csv",
+                "data": csv_content,
+                "total_properties": len(export_data)
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error exporting properties: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Property Schema Editor Web Routes
+
+@app.get("/schema", response_class=HTMLResponse)
+async def schema_dashboard(request: Request):
+    """Property schema editor dashboard."""
+    return templates.TemplateResponse("schema_dashboard.html", {
+        "request": request
+    })
+
+
+@app.get("/schema/properties", response_class=HTMLResponse)
+async def schema_properties_list(request: Request):
+    """Property list view with filters."""
+    return templates.TemplateResponse("schema_properties.html", {
+        "request": request
+    })
+
+
+@app.get("/schema/properties/{entity_type}/{property_key}", response_class=HTMLResponse)
+async def schema_property_detail(request: Request, entity_type: str, property_key: str):
+    """Property detail and edit page."""
+    return templates.TemplateResponse("schema_property_detail.html", {
+        "request": request,
+        "entity_type": entity_type,
+        "property_key": property_key
+    })
+
+
+@app.get("/schema/import", response_class=HTMLResponse)
+async def schema_import_page(request: Request):
+    """Bulk import page."""
+    return templates.TemplateResponse("schema_import.html", {
+        "request": request
+    })
+
+
+@app.get("/schema/discover", response_class=HTMLResponse)
+async def schema_discover_page(request: Request):
+    """Property discovery page."""
+    return templates.TemplateResponse("schema_discover.html", {
+        "request": request
+    })
+
+
 # Pattern Management Routes
 
 @app.get("/patterns", response_class=HTMLResponse)

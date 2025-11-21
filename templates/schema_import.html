@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}Import/Export - Property Schema Editor{% endblock %}
+
+{% block content %}
+<div class="schema-editor">
+    <div class="page-header">
+        <div class="page-header-left">
+            <a href="/schema" class="back-link">&larr; Back to Schema Dashboard</a>
+            <h1 class="page-title">Import & Export</h1>
+        </div>
+    </div>
+
+    <!-- Import Section -->
+    <div class="import-section">
+        <h2>Import Properties</h2>
+        <p>Upload a JSON or CSV file containing property definitions and translations.</p>
+
+        <div class="import-format-selector">
+            <label>
+                <input type="radio" name="import-format" value="json" checked>
+                JSON Format
+            </label>
+            <label>
+                <input type="radio" name="import-format" value="csv">
+                CSV Format
+            </label>
+        </div>
+
+        <div class="import-options">
+            <label>
+                <input type="checkbox" id="merge-option" checked>
+                Merge with existing properties (uncheck to replace)
+            </label>
+        </div>
+
+        <div class="file-upload-area" id="file-upload-area">
+            <input type="file" id="file-input" accept=".json,.csv" style="display: none;">
+            <div class="upload-placeholder">
+                <div class="upload-icon">📁</div>
+                <p>Drop file here or <button class="link-button" id="browse-btn">browse</button></p>
+                <small>Supported formats: JSON, CSV</small>
+            </div>
+            <div id="file-info" class="file-info" style="display: none;"></div>
+        </div>
+
+        <div class="format-examples">
+            <div class="example-section" id="json-example">
+                <h3>JSON Format Example</h3>
+                <pre><code>[
+  {
+    "property_key": "price",
+    "entity_type": "Laptop",
+    "data_type": "FLOAT",
+    "unit": "USD",
+    "translations": {
+      "en": "Price",
+      "es-ES": "Precio",
+      "fr": "Prix"
+    }
+  }
+]</code></pre>
+            </div>
+
+            <div class="example-section" id="csv-example" style="display: none;">
+                <h3>CSV Format Example</h3>
+                <pre><code>property_key,entity_type,data_type,unit,en,es-ES,fr
+price,Laptop,FLOAT,USD,Price,Precio,Prix
+screen_size,Laptop,FLOAT,inches,Screen Size,Tamaño de Pantalla,Taille d'Écran</code></pre>
+            </div>
+        </div>
+
+        <div class="import-actions">
+            <button class="btn btn-primary" id="import-btn" disabled>Import</button>
+            <button class="btn btn-secondary" id="cancel-import-btn">Cancel</button>
+        </div>
+
+        <div id="import-results" class="import-results" style="display: none;"></div>
+    </div>
+
+    <!-- Export Section -->
+    <div class="export-section">
+        <h2>Export Properties</h2>
+        <p>Download all property definitions with translations.</p>
+
+        <div class="export-options">
+            <div class="form-group">
+                <label for="export-format">Format:</label>
+                <select id="export-format">
+                    <option value="json">JSON</option>
+                    <option value="csv">CSV</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="export-entity-type">Entity Type:</label>
+                <select id="export-entity-type">
+                    <option value="">All Entity Types</option>
+                </select>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" id="export-btn">Download Export</button>
+    </div>
+</div>
+
+<script>
+let selectedFile = null;
+
+// Format selector
+document.querySelectorAll('input[name="import-format"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        if (e.target.value === 'json') {
+            document.getElementById('json-example').style.display = 'block';
+            document.getElementById('csv-example').style.display = 'none';
+        } else {
+            document.getElementById('json-example').style.display = 'none';
+            document.getElementById('csv-example').style.display = 'block';
+        }
+    });
+});
+
+// File upload handling
+document.getElementById('browse-btn').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+});
+
+document.getElementById('file-input').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        selectedFile = e.target.files[0];
+        showFileInfo(selectedFile);
+    }
+});
+
+// Drag and drop
+const uploadArea = document.getElementById('file-upload-area');
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+
+    if (e.dataTransfer.files.length > 0) {
+        selectedFile = e.dataTransfer.files[0];
+        showFileInfo(selectedFile);
+    }
+});
+
+function showFileInfo(file) {
+    const fileInfo = document.getElementById('file-info');
+    fileInfo.innerHTML = `
+        <div class="file-name">${file.name}</div>
+        <div class="file-size">${(file.size / 1024).toFixed(2)} KB</div>
+        <button class="btn-small btn-secondary" onclick="clearFile()">Remove</button>
+    `;
+    fileInfo.style.display = 'flex';
+    uploadArea.querySelector('.upload-placeholder').style.display = 'none';
+    document.getElementById('import-btn').disabled = false;
+}
+
+function clearFile() {
+    selectedFile = null;
+    document.getElementById('file-input').value = '';
+    document.getElementById('file-info').style.display = 'none';
+    uploadArea.querySelector('.upload-placeholder').style.display = 'block';
+    document.getElementById('import-btn').disabled = true;
+}
+
+// Import
+document.getElementById('import-btn').addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    const format = document.querySelector('input[name="import-format"]:checked').value;
+    const merge = document.getElementById('merge-option').checked;
+
+    try {
+        const fileContent = await selectedFile.text();
+
+        const response = await fetch('/api/properties/import', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                format: format,
+                data: fileContent,
+                merge: merge
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Import failed');
+        }
+
+        const result = await response.json();
+
+        // Show results
+        const resultsDiv = document.getElementById('import-results');
+        resultsDiv.innerHTML = `
+            <div class="import-success">
+                <h3>Import Successful!</h3>
+                <p><strong>${result.created}</strong> properties created</p>
+                <p><strong>${result.updated}</strong> properties updated</p>
+                ${result.errors.length > 0 ? `
+                    <div class="import-errors">
+                        <h4>Errors:</h4>
+                        <ul>
+                            ${result.errors.map(err => `<li>${err}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        resultsDiv.style.display = 'block';
+
+        clearFile();
+
+    } catch (error) {
+        const resultsDiv = document.getElementById('import-results');
+        resultsDiv.innerHTML = `
+            <div class="import-error">
+                <h3>Import Failed</h3>
+                <p>${error.message}</p>
+            </div>
+        `;
+        resultsDiv.style.display = 'block';
+    }
+});
+
+document.getElementById('cancel-import-btn').addEventListener('click', () => {
+    clearFile();
+    document.getElementById('import-results').style.display = 'none';
+});
+
+// Load entity types for export filter
+async function loadEntityTypes() {
+    try {
+        const response = await fetch('/api/entity-types');
+        const data = await response.json();
+
+        const select = document.getElementById('export-entity-type');
+        data.entity_types.forEach(et => {
+            const option = document.createElement('option');
+            option.value = et.label;
+            option.textContent = et.label;
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading entity types:', error);
+    }
+}
+
+// Export
+document.getElementById('export-btn').addEventListener('click', async () => {
+    const format = document.getElementById('export-format').value;
+    const entityType = document.getElementById('export-entity-type').value;
+
+    const params = new URLSearchParams({ format });
+    if (entityType) params.append('entity_type', entityType);
+
+    try {
+        const response = await fetch(`/api/properties/export?${params.toString()}`);
+        const data = await response.json();
+
+        // Download file
+        const blob = new Blob([data.data], {
+            type: format === 'json' ? 'application/json' : 'text/csv'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `properties_export_${new Date().toISOString().split('T')[0]}.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+    } catch (error) {
+        alert('Error exporting: ' + error.message);
+    }
+});
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadEntityTypes();
+});
+</script>
+{% endblock %}
