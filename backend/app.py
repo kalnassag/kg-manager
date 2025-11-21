@@ -1801,6 +1801,44 @@ async def test_llm_connection():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/chatbot/models")
+async def get_available_models():
+    """
+    Get list of available models for each LLM provider.
+
+    Returns a dictionary mapping providers to their available models.
+    """
+    models = {
+        "openai": [
+            {"id": "gpt-4-turbo-preview", "name": "GPT-4 Turbo (Latest)", "description": "Most capable model, best for complex queries"},
+            {"id": "gpt-4", "name": "GPT-4", "description": "High capability, stable"},
+            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast and cost-effective"}
+        ],
+        "anthropic": [
+            {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "description": "Most capable Claude model"},
+            {"id": "claude-3-sonnet-20240229", "name": "Claude 3 Sonnet", "description": "Balanced performance and speed"},
+            {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku", "description": "Fastest, most cost-effective"}
+        ],
+        "google": [
+            {"id": "gemini-1.5-pro-latest", "name": "Gemini 1.5 Pro (Latest)", "description": "Most capable Gemini model"},
+            {"id": "gemini-pro", "name": "Gemini Pro", "description": "Balanced performance"}
+        ],
+        "ollama": [
+            {"id": "llama2", "name": "Llama 2", "description": "Meta's open-source model"},
+            {"id": "mistral", "name": "Mistral", "description": "High quality open-source model"},
+            {"id": "codellama", "name": "Code Llama", "description": "Specialized for code"},
+            {"id": "mixtral", "name": "Mixtral", "description": "Mixture of experts model"},
+            {"id": "llama2:13b", "name": "Llama 2 13B", "description": "Larger Llama 2 variant"},
+            {"id": "phi", "name": "Phi", "description": "Microsoft's small language model"}
+        ]
+    }
+
+    return {
+        "models": models,
+        "last_updated": "2024-03-01"
+    }
+
+
 @app.get("/chatbot", response_class=HTMLResponse)
 async def chatbot_page(request: Request):
     """Chatbot interface page."""

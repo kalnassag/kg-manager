@@ -39,8 +39,10 @@
 
                 <div class="form-group">
                     <label for="model">Model</label>
-                    <input type="text" id="model" name="model" value="gpt-4" required>
-                    <small id="model-hint">Examples: gpt-4, gpt-3.5-turbo, claude-3-sonnet-20240229</small>
+                    <select id="model" name="model" required>
+                        <option value="">Loading models...</option>
+                    </select>
+                    <small id="model-hint">Select a model for the chosen provider</small>
                 </div>
 
                 <div class="form-row">
@@ -132,14 +134,42 @@
 <script>
 let conversationId = null;
 let isConfigured = false;
+let availableModels = {};
 
-// Provider model hints
-const modelHints = {
-    'openai': 'Examples: gpt-4, gpt-4-turbo, gpt-3.5-turbo',
-    'anthropic': 'Examples: claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307',
-    'google': 'Examples: gemini-pro, gemini-1.5-pro',
-    'ollama': 'Examples: llama2, mistral, codellama'
-};
+// Load available models from API
+async function loadAvailableModels() {
+    try {
+        const response = await fetch('/api/chatbot/models');
+        const data = await response.json();
+        availableModels = data.models;
+
+        // Initialize with OpenAI models
+        updateModelDropdown('openai');
+    } catch (error) {
+        console.error('Error loading models:', error);
+    }
+}
+
+// Update model dropdown based on selected provider
+function updateModelDropdown(provider) {
+    const modelSelect = document.getElementById('model');
+    const models = availableModels[provider] || [];
+
+    modelSelect.innerHTML = '<option value="">Select a model...</option>';
+
+    models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.name;
+        option.title = model.description;
+        modelSelect.appendChild(option);
+    });
+
+    // Select first model by default
+    if (models.length > 0) {
+        modelSelect.value = models[0].id;
+    }
+}
 
 // Settings panel toggle
 document.getElementById('settings-toggle').addEventListener('click', () => {
@@ -153,7 +183,7 @@ document.getElementById('settings-close').addEventListener('click', () => {
 // Provider change handler
 document.getElementById('provider').addEventListener('change', (e) => {
     const provider = e.target.value;
-    document.getElementById('model-hint').textContent = modelHints[provider];
+    updateModelDropdown(provider);
 
     // Show base URL for Ollama
     if (provider === 'ollama') {
@@ -362,5 +392,8 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// Initialize on page load
+loadAvailableModels();
 </script>
 {% endblock %}

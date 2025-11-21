@@ -363,7 +363,7 @@ def get_llm_service(
     # If settings provided, update the service
     if settings is not None and prompt_config is not None:
         settings_dict = {
-            "provider": settings.provider,
+            "provider": settings.provider.value,
             "model": settings.model,
             "temperature": settings.temperature,
             "max_tokens": settings.max_tokens,
